@@ -34,7 +34,7 @@ def load_config() -> dict:
     except json.JSONDecodeError:
         return _quarantine(path)
 
-    if not isinstance(data, dict) or not _has_valid_header(data):
+    if not isinstance(data, dict) or not _has_valid_schema(data):
         return _quarantine(path)
 
     normalized = _normalize(data)
@@ -51,7 +51,8 @@ def save_config(cfg: dict) -> None:
     if not _is_valid_theme(theme):
         theme = DEFAULT_THEME
 
-    _atomic_write(CONFIG_PATH, _payload(theme, _coerce_position(cfg.get("position"))))
+    position = _coerce_position(cfg.get("position"))
+    _atomic_write(CONFIG_PATH, _config_document(theme, position))
 
 
 def default_position(workareas: list[WorkArea]) -> Position:
@@ -73,10 +74,10 @@ def validate_position(pos: object, workareas: list[WorkArea]) -> Position:
 
 
 def _defaults() -> dict:
-    return _payload(DEFAULT_THEME)
+    return _config_document(DEFAULT_THEME)
 
 
-def _has_valid_header(data: dict) -> bool:
+def _has_valid_schema(data: dict) -> bool:
     version = data.get("version")
     return (
         _is_int(version)
@@ -86,10 +87,10 @@ def _has_valid_header(data: dict) -> bool:
 
 
 def _normalize(data: dict) -> dict:
-    return _payload(data["theme"], _position_from_mapping(data.get("position")))
+    return _config_document(data["theme"], _position_from_mapping(data.get("position")))
 
 
-def _payload(theme: str, position: tuple[int, int] | None = None) -> dict:
+def _config_document(theme: str, position: Position | None = None) -> dict:
     data: dict = {"version": CONFIG_VERSION, "theme": theme}
     if position is not None:
         data["position"] = {"x": position[0], "y": position[1]}

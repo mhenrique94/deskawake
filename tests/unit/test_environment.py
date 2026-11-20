@@ -1,3 +1,5 @@
+import pytest
+
 import core.environment
 from core.environment import BACKEND_BUS_NAMES, detect_environment, is_wayland
 
@@ -18,6 +20,19 @@ class FakeBus:
     def call_blocking(self, *args, **kwargs):
         self.blocking_calls.append((args, kwargs))
         raise AssertionError("call_blocking must not be used during detection")
+
+
+class FailingBus(FakeBus):
+    def __init__(self, failing_name, exception, owned=()):
+        super().__init__(owned)
+        self.failing_name = failing_name
+        self.exception = exception
+
+    def name_has_owner(self, name):
+        if name == self.failing_name:
+            self.name_has_owner_calls.append(name)
+            raise self.exception
+        return super().name_has_owner(name)
 
 
 def _which_marks(*present):
@@ -133,6 +148,31 @@ def test_detection_only_uses_name_has_owner():
 
     assert sorted(bus.name_has_owner_calls) == sorted(BACKEND_BUS_NAMES.values())
     assert bus.blocking_calls == []
+
+
+@pytest.mark.parametrize(
+    "exception",
+    [
+        KeyError("boom"),
+        RuntimeError("boom"),
+        core.environment.dbus.DBusException("boom"),
+    ],
+)
+def test_backend_failure_does_not_abort_detection(exception):
+    bus = FailingBus(
+        failing_name="org.mate.ScreenSaver",
+        exception=exception,
+        owned={"org.gnome.SessionManager"},
+    )
+
+    environment = _detect(bus=bus)
+
+    assert environment.backends == {
+        "fdo": False,
+        "mate": False,
+        "gsm": True,
+        "policyagent": False,
+    }
 
 
 def test_no_session_bus_marks_all_backends_false(monkeypatch):

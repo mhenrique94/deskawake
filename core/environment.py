@@ -47,7 +47,8 @@ def detect_environment(
         for name, bus_name in BACKEND_BUS_NAMES.items():
             try:
                 backends[name] = bool(bus.name_has_owner(bus_name))
-            except (dbus.DBusException, OSError):
+            except Exception:
+                # Um backend indisponível não pode derrubar a detecção inteira.
                 backends[name] = False
 
     tools = {name: which(name) is not None for name in TOOL_NAMES}

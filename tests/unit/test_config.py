@@ -12,6 +12,18 @@ def _config_path(monkeypatch, tmp_path: Path) -> Path:
     return path
 
 
+def _bak(path: Path) -> Path:
+    return path.with_name("config.json.bak")
+
+
+def _seed(path: Path, content: str | bytes) -> None:
+    path.parent.mkdir(parents=True)
+    if isinstance(content, bytes):
+        path.write_bytes(content)
+    else:
+        path.write_text(content, encoding="utf-8")
+
+
 def test_load_missing_returns_defaults_without_creating_file(monkeypatch, tmp_path):
     path = _config_path(monkeypatch, tmp_path)
 
@@ -89,14 +101,27 @@ def test_save_failure_removes_tmp(monkeypatch, tmp_path):
 
 def test_corrupt_json_quarantines_and_recovers(monkeypatch, tmp_path):
     path = _config_path(monkeypatch, tmp_path)
-    path.parent.mkdir(parents=True)
     original = "{oops"
-    path.write_text(original, encoding="utf-8")
+    _seed(path, original)
 
     assert core.config.load_config() == {"version": 1, "theme": "auto"}
 
-    bak = path.with_name("config.json.bak")
+    bak = _bak(path)
     assert bak.read_text(encoding="utf-8") == original
+    assert json.loads(path.read_text(encoding="utf-8")) == {
+        "version": 1,
+        "theme": "auto",
+    }
+
+
+def test_invalid_utf8_quarantines_and_recovers(monkeypatch, tmp_path):
+    path = _config_path(monkeypatch, tmp_path)
+    original = b'{"version": 1, "theme": "\xff"}'
+    _seed(path, original)
+
+    assert core.config.load_config() == {"version": 1, "theme": "auto"}
+
+    assert _bak(path).read_bytes() == original
     assert json.loads(path.read_text(encoding="utf-8")) == {
         "version": 1,
         "theme": "auto",
@@ -105,45 +130,41 @@ def test_corrupt_json_quarantines_and_recovers(monkeypatch, tmp_path):
 
 def test_invalid_theme_quarantines(monkeypatch, tmp_path):
     path = _config_path(monkeypatch, tmp_path)
-    path.parent.mkdir(parents=True)
-    path.write_text('{"version": 1, "theme": "blue"}', encoding="utf-8")
+    _seed(path, '{"version": 1, "theme": "blue"}')
 
     assert core.config.load_config() == {"version": 1, "theme": "auto"}
 
-    assert path.with_name("config.json.bak").is_file()
+    assert _bak(path).is_file()
     assert json.loads(path.read_text(encoding="utf-8"))["theme"] == "auto"
 
 
 @pytest.mark.parametrize("root", [[], "x"])
 def test_non_dict_root_quarantines(monkeypatch, tmp_path, root):
     path = _config_path(monkeypatch, tmp_path)
-    path.parent.mkdir(parents=True)
-    path.write_text(json.dumps(root), encoding="utf-8")
+    _seed(path, json.dumps(root))
 
     assert core.config.load_config() == {"version": 1, "theme": "auto"}
 
-    assert path.with_name("config.json.bak").is_file()
+    assert _bak(path).is_file()
 
 
 def test_unknown_version_quarantines(monkeypatch, tmp_path):
     path = _config_path(monkeypatch, tmp_path)
-    path.parent.mkdir(parents=True)
-    path.write_text('{"version": 2, "theme": "auto"}', encoding="utf-8")
+    _seed(path, '{"version": 2, "theme": "auto"}')
 
     assert core.config.load_config() == {"version": 1, "theme": "auto"}
 
-    assert path.with_name("config.json.bak").is_file()
+    assert _bak(path).is_file()
 
 
 @pytest.mark.parametrize("data", [{"version": 1}, {"theme": "auto"}, {}])
 def test_missing_theme_or_version_quarantines(monkeypatch, tmp_path, data):
     path = _config_path(monkeypatch, tmp_path)
-    path.parent.mkdir(parents=True)
-    path.write_text(json.dumps(data), encoding="utf-8")
+    _seed(path, json.dumps(data))
 
     assert core.config.load_config() == {"version": 1, "theme": "auto"}
 
-    assert path.with_name("config.json.bak").is_file()
+    assert _bak(path).is_file()
 
 
 def test_read_oserror_returns_defaults_without_bak(monkeypatch, tmp_path):
@@ -152,7 +173,7 @@ def test_read_oserror_returns_defaults_without_bak(monkeypatch, tmp_path):
 
     assert core.config.load_config() == {"version": 1, "theme": "auto"}
 
-    assert not path.with_name("config.json.bak").exists()
+    assert not _bak(path).exists()
     assert path.is_dir()
 
 
@@ -162,15 +183,14 @@ def test_read_oserror_returns_defaults_without_bak(monkeypatch, tmp_path):
 )
 def test_malformed_position_is_dropped_without_bak(monkeypatch, tmp_path, position):
     path = _config_path(monkeypatch, tmp_path)
-    path.parent.mkdir(parents=True)
-    path.write_text(
+    _seed(
+        path,
         json.dumps({"version": 1, "theme": "dark", "position": position}),
-        encoding="utf-8",
     )
 
     assert core.config.load_config() == {"version": 1, "theme": "dark"}
 
-    assert not path.with_name("config.json.bak").exists()
+    assert not _bak(path).exists()
     assert json.loads(path.read_text(encoding="utf-8")) == {
         "version": 1,
         "theme": "dark",
@@ -179,8 +199,8 @@ def test_malformed_position_is_dropped_without_bak(monkeypatch, tmp_path, positi
 
 def test_extra_keys_are_dropped_without_bak(monkeypatch, tmp_path):
     path = _config_path(monkeypatch, tmp_path)
-    path.parent.mkdir(parents=True)
-    path.write_text(
+    _seed(
+        path,
         json.dumps(
             {
                 "version": 1,
@@ -189,13 +209,12 @@ def test_extra_keys_are_dropped_without_bak(monkeypatch, tmp_path):
                 "active": True,
             }
         ),
-        encoding="utf-8",
     )
 
     expected = {"version": 1, "theme": "dark", "position": {"x": 10, "y": 20}}
     assert core.config.load_config() == expected
 
-    assert not path.with_name("config.json.bak").exists()
+    assert not _bak(path).exists()
     assert json.loads(path.read_text(encoding="utf-8")) == expected
 
 
