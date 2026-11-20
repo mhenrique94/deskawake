@@ -2,7 +2,6 @@
 from __future__ import annotations
 
 import argparse
-import json
 import os
 import sys
 
@@ -11,50 +10,34 @@ import dbus.service
 from dbus.mainloop.glib import DBusGMainLoop
 from gi.repository import GLib
 
-FDO_NAME = "org.freedesktop.ScreenSaver"
-FDO_PATH = "/org/freedesktop/ScreenSaver"
-FDO_IFACE = "org.freedesktop.ScreenSaver"
+from fake_common import JsonlLog
+from dbus_contract import (
+    BACKEND_IFACES,
+    BACKEND_NAMES,
+    BACKEND_PATHS,
+    GSM_IDLE_FLAG,
+    POLICYAGENT_CHANGE_SCREEN_SETTINGS,
+    POLICYAGENT_IFACE,
+    POLICYAGENT_NAME,
+    POLICYAGENT_PATH,
+)
 
-MATE_NAME = "org.mate.ScreenSaver"
-MATE_PATH = "/org/mate/ScreenSaver"
-MATE_IFACE = "org.mate.ScreenSaver"
+FDO_NAME = BACKEND_NAMES["fdo"]
+FDO_PATH = BACKEND_PATHS["fdo"]
+FDO_IFACE = BACKEND_IFACES["fdo"]
 
-GSM_NAME = "org.gnome.SessionManager"
-GSM_PATH = "/org/gnome/SessionManager"
-GSM_IFACE = "org.gnome.SessionManager"
+MATE_NAME = BACKEND_NAMES["mate"]
+MATE_PATH = BACKEND_PATHS["mate"]
+MATE_IFACE = BACKEND_IFACES["mate"]
+MATE_SINCE = "2026-01-01 00:00:00"
 
-PA_NAME = "org.kde.Solid.PowerManagement"
-PA_PATH = "/org/kde/Solid/PowerManagement/PolicyAgent"
-PA_IFACE = "org.kde.Solid.PowerManagement.PolicyAgent"
+GSM_NAME = BACKEND_NAMES["gsm"]
+GSM_PATH = BACKEND_PATHS["gsm"]
+GSM_IFACE = BACKEND_IFACES["gsm"]
 
-GSM_IDLE_FLAG = 8
-POLICYAGENT_CHANGE_SCREEN_SETTINGS = 4
-
-
-def _plain(value):
-    if isinstance(value, dict):
-        return {str(key): _plain(item) for key, item in value.items()}
-    if isinstance(value, (list, tuple)):
-        return [_plain(item) for item in value]
-    if isinstance(value, (str, int, float, bool)) or value is None:
-        return value
-    return str(value)
-
-
-class JsonlLog:
-    def __init__(self, path):
-        self._file = open(path, "a", encoding="utf-8") if path else None
-
-    def write(self, **entry):
-        if self._file is None:
-            return
-        self._file.write(json.dumps(_plain(entry), ensure_ascii=False) + "\n")
-        self._file.flush()
-
-    def close(self):
-        if self._file is not None:
-            self._file.close()
-            self._file = None
+PA_NAME = POLICYAGENT_NAME
+PA_PATH = POLICYAGENT_PATH
+PA_IFACE = POLICYAGENT_IFACE
 
 
 class State:
@@ -196,7 +179,7 @@ class MateObject(dbus.service.Object):
     @dbus.service.method(MATE_IFACE, in_signature="", out_signature="as")
     def GetInhibitors(self):
         items = [
-            f"Application={who}; Reason={why};"
+            f'Application="{who}"; Since="{MATE_SINCE}"; Reason="{why}";'
             for who, why in self.state.mate.values()
         ]
         self.state.log.write(
@@ -234,6 +217,23 @@ class GsmObject(dbus.service.Object):
             backend="gsm", method="IsInhibited", args=[flags], active=active
         )
         return dbus.Boolean(active)
+
+    @dbus.service.method(GSM_IFACE, in_signature="", out_signature="")
+    def DropMate(self):
+        self.state.bus.release_name(MATE_NAME)
+        self.state.log.write(event="mate_name_dropped")
+
+    @dbus.service.method(GSM_IFACE, in_signature="", out_signature="")
+    def RestoreMate(self):
+        reply = self.state.bus.request_name(
+            MATE_NAME, dbus.bus.NAME_FLAG_DO_NOT_QUEUE
+        )
+        if reply not in (
+            dbus.bus.REQUEST_NAME_REPLY_PRIMARY_OWNER,
+            dbus.bus.REQUEST_NAME_REPLY_ALREADY_OWNER,
+        ):
+            raise dbus.DBusException("não foi possível restaurar o MATE")
+        self.state.log.write(event="mate_name_restored")
 
 
 def main(argv=None):

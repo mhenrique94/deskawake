@@ -37,7 +37,7 @@ class StateMachine:
         self._state = State.OFF
         self._last_error = ""
         self._verify_source: int | None = None
-        self._recovering = False
+        self._awaiting_dependency_return = False
 
     @property
     def state(self) -> str:
@@ -68,36 +68,20 @@ class StateMachine:
 
         previous_public = self.public_state
         was_error = self._state is State.ERROR
-        self._recovering = False
+        self._awaiting_dependency_return = False
         self._state = State.ACTIVATING
-        started_child = False
-
-        try:
-            if was_error:
-                self.cancel_pending_verification()
-                self._safe_release()
-            if not self._systemd.alive:
-                self._systemd.start()
-                started_child = True
-            self._screen.acquire()
-        except Exception as exc:
+        if was_error:
+            self.cancel_pending_verification()
             self._safe_release()
-            if started_child:
-                self._safe_stop_child()
-            self._last_error = str(exc) or "falha ao ativar o DeskAwake"
+
+        if not self._start_inhibitors():
             self._state = State.ERROR
-            self._recovering = False
+            self._awaiting_dependency_return = False
             if previous_public != "error":
                 self._on_change("error")
             return "error"
 
-        self._state = State.ON
-        self._last_error = ""
-        self._recovering = False
-        self.cancel_pending_verification()
-        if self._screen.needs_verification:
-            self._schedule_verification()
-        self._on_change("on")
+        self._mark_on()
         return "on"
 
     def deactivate(self) -> str:
@@ -112,7 +96,7 @@ class StateMachine:
         self._safe_stop_child()
         self._state = State.OFF
         self._last_error = ""
-        self._recovering = False
+        self._awaiting_dependency_return = False
         self._on_change("off")
         return "off"
 
@@ -133,23 +117,47 @@ class StateMachine:
         except Exception as exc:
             logger.warning("falha ao cancelar a verificação pendente: %s", exc)
 
-    def handle_screen_lost(self, reason: str) -> None:
+    def handle_dependency_lost(self, reason: str) -> None:
         if self._state is not State.ON:
             return
         self.cancel_pending_verification()
         self._safe_release()
         self._state = State.ERROR
         self._last_error = reason
-        self._recovering = True
+        self._awaiting_dependency_return = True
         self._on_change("error")
 
-    def handle_screen_returned(self) -> None:
-        if self._state is not State.ERROR or not self._recovering:
+    def handle_dependency_returned(self) -> None:
+        if (
+            self._state is not State.ERROR
+            or not self._awaiting_dependency_return
+        ):
             return
 
+        self._safe_release()
+        if not self._start_inhibitors(
+            "falha ao recuperar a inibição de tela"
+        ):
+            logger.error(
+                "falha ao recuperar a inibição de tela: %s", self._last_error
+            )
+            return
+        self._mark_on()
+
+    def handle_session_end(self) -> None:
+        self.cancel_pending_verification()
+        self._safe_stop_child()
+        self._state = State.OFF
+        self._last_error = ""
+        self._awaiting_dependency_return = False
+
+    # --- internos ---------------------------------------------------------
+
+    def _start_inhibitors(
+        self, fallback_reason: str = "falha ao ativar o DeskAwake"
+    ) -> bool:
         started_child = False
         try:
-            self._safe_release()
             if not self._systemd.alive:
                 self._systemd.start()
                 started_child = True
@@ -158,25 +166,18 @@ class StateMachine:
             self._safe_release()
             if started_child:
                 self._safe_stop_child()
-            self._last_error = str(exc) or "falha ao recuperar a inibição de tela"
-            return
+            self._last_error = str(exc) or fallback_reason
+            return False
+        return True
 
+    def _mark_on(self) -> None:
         self._state = State.ON
         self._last_error = ""
-        self._recovering = False
+        self._awaiting_dependency_return = False
         self.cancel_pending_verification()
         if self._screen.needs_verification:
             self._schedule_verification()
         self._on_change("on")
-
-    def handle_session_end(self) -> None:
-        self.cancel_pending_verification()
-        self._safe_stop_child()
-        self._state = State.OFF
-        self._last_error = ""
-        self._recovering = False
-
-    # --- internos ---------------------------------------------------------
 
     def _safe_release(self) -> None:
         if self._screen is None:
@@ -220,7 +221,7 @@ class StateMachine:
         self._safe_stop_child()
         self._last_error = "a inibição de tela não foi confirmada"
         self._state = State.ERROR
-        self._recovering = False
+        self._awaiting_dependency_return = False
         self._on_change("error")
         return False
 

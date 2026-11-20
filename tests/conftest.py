@@ -14,25 +14,31 @@ from types import SimpleNamespace
 import dbus
 import pytest
 from dbus.mainloop.glib import DBusGMainLoop
+from dbus_contract import (
+    BACKEND_NAMES,
+    DAEMON_IFACE,
+    DAEMON_NAME,
+    DAEMON_PATH,
+    POLICYAGENT_NAME,
+)
 from gi.repository import GLib
 
 DBusGMainLoop(set_as_default=True)
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 
-DBUS_NAME = "org.local.DeskAwake"
-OBJECT_PATH = "/org/local/DeskAwake"
-INTERFACE = "org.local.DeskAwake"
+DBUS_NAME = DAEMON_NAME
+OBJECT_PATH = DAEMON_PATH
+INTERFACE = DAEMON_IFACE
 
 FAKE_SCREENSAVER = REPO_ROOT / "tests/integration/fakes/fake_screensaver.py"
 FAKE_POLICYAGENT = REPO_ROOT / "tests/integration/fakes/fake_policyagent.py"
 
 SCREENSAVER_NAMES = {
-    "--fdo": "org.freedesktop.ScreenSaver",
-    "--mate": "org.mate.ScreenSaver",
-    "--gsm": "org.gnome.SessionManager",
+    "--fdo": BACKEND_NAMES["fdo"],
+    "--mate": BACKEND_NAMES["mate"],
+    "--gsm": BACKEND_NAMES["gsm"],
 }
-POLICYAGENT_NAME = "org.kde.Solid.PowerManagement"
 
 
 # --- fakes unitários de D-Bus -------------------------------------------------

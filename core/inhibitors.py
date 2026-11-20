@@ -6,6 +6,8 @@ import os
 import signal
 import subprocess
 import time
+from collections.abc import Callable
+from dataclasses import dataclass
 
 import dbus
 
@@ -22,15 +24,56 @@ GSM_IDLE_FLAG = 8
 POLICYAGENT_CHANGE_SCREEN_SETTINGS = 4
 POLICYAGENT_ACTIVE_MASK = 3
 
-BACKEND_PATHS = {
-    "fdo": "/org/freedesktop/ScreenSaver",
-    "mate": "/org/mate/ScreenSaver",
-    "gsm": "/org/gnome/SessionManager",
-}
-BACKEND_IFACES = {
-    "fdo": "org.freedesktop.ScreenSaver",
-    "mate": "org.mate.ScreenSaver",
-    "gsm": "org.gnome.SessionManager",
+
+def _plain_inhibit_args(who: str, why: str) -> tuple[str, str]:
+    return (who, why)
+
+
+def _gsm_inhibit_args(who: str, why: str):
+    return (who, dbus.UInt32(0), why, dbus.UInt32(GSM_IDLE_FLAG))
+
+
+@dataclass(frozen=True)
+class Backend:
+    name: str
+    bus_name: str
+    path: str
+    iface: str
+    inhibit_args: Callable[[str, str], tuple]
+    release_member: str
+
+
+@dataclass(frozen=True)
+class Inhibition:
+    backend: Backend
+    cookie: int
+
+
+BACKEND_SPECS: dict[str, Backend] = {
+    "fdo": Backend(
+        "fdo",
+        BACKEND_BUS_NAMES["fdo"],
+        "/org/freedesktop/ScreenSaver",
+        "org.freedesktop.ScreenSaver",
+        _plain_inhibit_args,
+        "UnInhibit",
+    ),
+    "mate": Backend(
+        "mate",
+        BACKEND_BUS_NAMES["mate"],
+        "/org/mate/ScreenSaver",
+        "org.mate.ScreenSaver",
+        _plain_inhibit_args,
+        "UnInhibit",
+    ),
+    "gsm": Backend(
+        "gsm",
+        BACKEND_BUS_NAMES["gsm"],
+        "/org/gnome/SessionManager",
+        "org.gnome.SessionManager",
+        _gsm_inhibit_args,
+        "Uninhibit",
+    ),
 }
 
 # Erros que significam "o mecanismo não existe", não falha de transporte.
@@ -123,15 +166,17 @@ class SystemdInhibit:
             try:
                 try:
                     _, stderr = proc.communicate(timeout=1)
-                except TypeError:
-                    _, stderr = proc.communicate()
                 except subprocess.TimeoutExpired:
                     pass
             finally:
                 self._close_pipe(proc)
             detail = stderr.decode(errors="replace").strip() if stderr else ""
             if detail:
+                logger.error("systemd-inhibit encerrou: %s", detail)
                 raise InhibitError(f"systemd-inhibit encerrou: {detail}")
+            logger.error(
+                "systemd-inhibit encerrou com código %s antes de inibir", exit_code
+            )
             raise InhibitError(
                 f"systemd-inhibit encerrou com código {exit_code} antes de inibir"
             )
@@ -206,50 +251,62 @@ class ScreenSaverInhibit:
         self.why = why
         self.debounce = debounce
         self.verify_delay = verify_delay
-        self.backend: str | None = None
-        self.path: str | None = None
-        self.cookie: int | None = None
+        self._inhibition: Inhibition | None = None
+        self._last_backend: Backend | None = None
         self._acquired_at: float = 0.0
 
+    @property
+    def backend(self) -> str | None:
+        backend = self._current_backend()
+        return backend.name if backend is not None else None
+
+    @property
+    def path(self) -> str | None:
+        backend = self._current_backend()
+        return backend.path if backend is not None else None
+
+    @property
+    def cookie(self) -> int | None:
+        if self._inhibition is None:
+            return None
+        return self._inhibition.cookie
+
     def acquire(self) -> None:
-        if self.cookie is not None:
+        if self._inhibition is not None:
             self.release()
-        self.backend = None
-        self.path = None
-        self.cookie = None
+        self._inhibition = None
+        self._last_backend = None
         self._acquired_at = 0.0
         reasons: list[str] = []
 
-        for backend in BACKENDS:
-            name = BACKEND_BUS_NAMES[backend]
-            if not self._has_owner(name):
-                reasons.append(f"{backend}=sem dono")
+        for name in BACKENDS:
+            backend = BACKEND_SPECS[name]
+            if not self._has_owner(backend.bus_name):
+                reasons.append(f"{backend.name}=sem dono")
                 continue
 
-            path = BACKEND_PATHS[backend]
             cookie = None
             try:
-                cookie = self._inhibit(backend, path)
-                if backend == "mate" and not self._confirm_mate():
-                    self._try_release(backend, path, cookie)
+                cookie = self._inhibit(backend)
+                if backend.name == "mate" and not self._confirm_mate():
+                    self._try_release(Inhibition(backend, cookie))
                     reasons.append("mate=não confirmou o proxy GSM")
                     continue
-                if backend == "gsm" and not self._confirm_gsm():
-                    self._try_release(backend, path, cookie)
+                if backend.name == "gsm" and not self._confirm_gsm():
+                    self._try_release(Inhibition(backend, cookie))
                     reasons.append("gsm=não confirmou IsInhibited(8)")
                     continue
             except Exception as exc:
                 if cookie is not None:
-                    self._try_release(backend, path, cookie)
-                logger.info("backend %s falhou ao inibir: %s", backend, exc)
-                reasons.append(f"{backend}={exc}")
+                    self._try_release(Inhibition(backend, cookie))
+                logger.info("backend %s falhou ao inibir: %s", backend.name, exc)
+                reasons.append(f"{backend.name}={exc}")
                 continue
 
-            self.backend = backend
-            self.path = path
-            self.cookie = cookie
+            self._inhibition = Inhibition(backend, cookie)
+            self._last_backend = backend
             self._acquired_at = time.monotonic()
-            logger.info("backend de tela adquirido: %s", backend)
+            logger.info("backend de tela adquirido: %s", backend.name)
             return
 
         raise InhibitError(
@@ -257,7 +314,7 @@ class ScreenSaverInhibit:
         )
 
     def confirm(self) -> bool:
-        if self.backend is None or self.cookie is None:
+        if self._inhibition is None:
             return False
         try:
             if self.backend == "mate":
@@ -270,10 +327,13 @@ class ScreenSaverInhibit:
             return False
 
     def release(self) -> None:
-        if self.backend is None or self.cookie is None:
+        inhibition = self._inhibition
+        if inhibition is None:
             return
-        self._try_release(self.backend, self.path, self.cookie)
-        self.cookie = None
+        try:
+            self._try_release(inhibition)
+        finally:
+            self._inhibition = None
 
     @property
     def needs_verification(self) -> bool:
@@ -282,7 +342,27 @@ class ScreenSaverInhibit:
         except Exception:
             return False
 
+    def relevant_names(self) -> set[str]:
+        if self.backend == "fdo":
+            return {
+                BACKEND_SPECS["fdo"].bus_name,
+                POLICYAGENT_NAME,
+            }
+        if self.backend == "mate":
+            return {
+                BACKEND_SPECS["mate"].bus_name,
+                BACKEND_SPECS["gsm"].bus_name,
+            }
+        if self.backend == "gsm":
+            return {BACKEND_SPECS["gsm"].bus_name}
+        return set()
+
     # --- internos ---------------------------------------------------------
+
+    def _current_backend(self) -> Backend | None:
+        if self._inhibition is not None:
+            return self._inhibition.backend
+        return self._last_backend
 
     def _has_owner(self, name: str) -> bool:
         try:
@@ -294,57 +374,40 @@ class ScreenSaverInhibit:
         interface = dbus.Interface(self._bus.get_object(name, path), iface)
         return getattr(interface, member)(*args)
 
-    def _inhibit(self, backend: str, path: str) -> int:
-        name = BACKEND_BUS_NAMES[backend]
-        iface = BACKEND_IFACES[backend]
-        if backend == "gsm":
-            cookie = self._call(
-                name,
-                path,
-                iface,
-                "Inhibit",
-                self.who,
-                dbus.UInt32(0),
-                self.why,
-                dbus.UInt32(GSM_IDLE_FLAG),
-            )
-        else:
-            cookie = self._call(name, path, iface, "Inhibit", self.who, self.why)
+    def _call_backend(self, backend: Backend, member: str, *args):
+        return self._call(
+            backend.bus_name, backend.path, backend.iface, member, *args
+        )
+
+    def _inhibit(self, backend: Backend) -> int:
+        cookie = self._call_backend(
+            backend, "Inhibit", *backend.inhibit_args(self.who, self.why)
+        )
         return int(cookie)
 
-    def _try_release(self, backend: str, path: str | None, cookie: int) -> None:
-        if path is None:
-            path = BACKEND_PATHS[backend]
-        method = "Uninhibit" if backend == "gsm" else "UnInhibit"
+    def _try_release(self, inhibition: Inhibition) -> None:
         try:
-            self._call(
-                BACKEND_BUS_NAMES[backend],
-                path,
-                BACKEND_IFACES[backend],
-                method,
-                dbus.UInt32(cookie),
+            self._call_backend(
+                inhibition.backend,
+                inhibition.backend.release_member,
+                dbus.UInt32(inhibition.cookie),
             )
         except (dbus.DBusException, OSError) as exc:
-            logger.warning("falha ao liberar o cookie %s: %s", cookie, exc)
-        except Exception as exc:
-            logger.warning("falha inesperada ao liberar o cookie %s: %s", cookie, exc)
+            logger.warning(
+                "falha ao liberar o cookie %s: %s", inhibition.cookie, exc
+            )
 
     def _confirm_mate(self) -> bool:
-        inhibitors = self._call(
-            BACKEND_BUS_NAMES["mate"],
-            BACKEND_PATHS["mate"],
-            BACKEND_IFACES["mate"],
-            "GetInhibitors",
+        inhibitors = self._call_backend(
+            BACKEND_SPECS["mate"], "GetInhibitors"
         )
-        marker = f"Application={self.who}"
+        marker = f'Application="{self.who}"'
         if not any(marker in str(item) for item in inhibitors):
             return False
-        if self._has_owner(BACKEND_BUS_NAMES["gsm"]):
+        if self._has_owner(BACKEND_SPECS["gsm"].bus_name):
             return bool(
-                self._call(
-                    BACKEND_BUS_NAMES["gsm"],
-                    BACKEND_PATHS["gsm"],
-                    BACKEND_IFACES["gsm"],
+                self._call_backend(
+                    BACKEND_SPECS["gsm"],
                     "IsInhibited",
                     dbus.UInt32(GSM_IDLE_FLAG),
                 )
@@ -353,10 +416,8 @@ class ScreenSaverInhibit:
 
     def _confirm_gsm(self) -> bool:
         return bool(
-            self._call(
-                BACKEND_BUS_NAMES["gsm"],
-                BACKEND_PATHS["gsm"],
-                BACKEND_IFACES["gsm"],
+            self._call_backend(
+                BACKEND_SPECS["gsm"],
                 "IsInhibited",
                 dbus.UInt32(GSM_IDLE_FLAG),
             )

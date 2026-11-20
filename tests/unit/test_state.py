@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import logging
+
 import pytest
 
 from core.state import State, StateMachine
@@ -320,16 +322,16 @@ def test_toggle_matrix(fake_systemd, fake_screen, start_state, expected, expecte
     assert events == expected_events
 
 
-def test_deactivate_clears_recovering(fake_systemd, fake_screen, fake_scheduler):
+def test_deactivate_clears_awaiting_dependency_return(fake_systemd, fake_screen, fake_scheduler):
     machine, _events, _systemd, screen, _scheduler = _activated(
         fake_systemd, fake_screen, fake_scheduler
     )
-    machine.handle_screen_lost("serviço caiu")
-    assert machine._recovering is True
+    machine.handle_dependency_lost("serviço caiu")
+    assert machine._awaiting_dependency_return is True
 
     machine.deactivate()
 
-    assert machine._recovering is False
+    assert machine._awaiting_dependency_return is False
 
 
 # --- verificação assíncrona --------------------------------------------------
@@ -470,12 +472,12 @@ def test_liveness_loss_preserves_child(fake_systemd, fake_screen, fake_scheduler
         fake_systemd, fake_screen, fake_scheduler
     )
 
-    machine.handle_screen_lost("serviço sumiu")
+    machine.handle_dependency_lost("serviço sumiu")
 
     assert "release" in screen.calls
     assert "stop" not in systemd.calls
     assert machine.state == "error"
-    assert machine._recovering is True
+    assert machine._awaiting_dependency_return is True
     assert machine.last_error == "serviço sumiu"
     assert events == ["on", "error"]
 
@@ -488,7 +490,7 @@ def test_liveness_loss_ignored_when_not_on(fake_systemd, fake_screen, fake_sched
     events.clear()
     calls_before = list(screen.calls)
 
-    machine.handle_screen_lost("sumiu")
+    machine.handle_dependency_lost("sumiu")
 
     assert machine.state == "off"
     assert events == []
@@ -506,7 +508,7 @@ def test_liveness_loss_cancels_pending_verification(
     )
     source_id = next(iter(scheduler.scheduled))
 
-    machine.handle_screen_lost("sumiu")
+    machine.handle_dependency_lost("sumiu")
 
     assert source_id in scheduler.cancelled
 
@@ -515,12 +517,12 @@ def test_liveness_return_single_attempt(fake_systemd, fake_screen, fake_schedule
     machine, events, _systemd, screen, _scheduler = _activated(
         fake_systemd, fake_screen, fake_scheduler
     )
-    machine.handle_screen_lost("sumiu")
+    machine.handle_dependency_lost("sumiu")
 
-    machine.handle_screen_returned()
+    machine.handle_dependency_returned()
 
     assert machine.state == "on"
-    assert machine._recovering is False
+    assert machine._awaiting_dependency_return is False
     assert screen.calls.count("acquire") == 2
     assert screen.calls.count("release") >= 2
     assert events == ["on", "error", "on"]
@@ -532,11 +534,11 @@ def test_liveness_return_starts_child_if_dead(
     machine, _events, systemd, screen, _scheduler = _activated(
         fake_systemd, fake_screen, fake_scheduler
     )
-    machine.handle_screen_lost("sumiu")
+    machine.handle_dependency_lost("sumiu")
     systemd.alive = False
     screen.calls.clear()
 
-    machine.handle_screen_returned()
+    machine.handle_dependency_returned()
 
     assert "start" in systemd.calls
     assert screen.calls[0] == "release"
@@ -549,10 +551,10 @@ def test_liveness_return_failure_no_signal(
     machine, events, systemd, screen, _scheduler = _activated(
         fake_systemd, fake_screen, fake_scheduler
     )
-    machine.handle_screen_lost("sumiu")
+    machine.handle_dependency_lost("sumiu")
     screen.acquire_raises = RuntimeError("ainda sem tela")
 
-    machine.handle_screen_returned()
+    machine.handle_dependency_returned()
 
     assert machine.state == "error"
     assert machine.last_error == "ainda sem tela"
@@ -560,7 +562,36 @@ def test_liveness_return_failure_no_signal(
     assert "stop" not in systemd.calls
 
 
-def test_liveness_return_ignored_when_not_recovering(
+def test_liveness_return_failure_logs_reason(
+    fake_systemd, fake_screen, fake_scheduler, caplog
+):
+    machine, _events, _systemd, screen, _scheduler = _activated(
+        fake_systemd, fake_screen, fake_scheduler
+    )
+    machine.handle_dependency_lost("sumiu")
+    screen.acquire_raises = RuntimeError("ainda sem tela")
+
+    with caplog.at_level(logging.ERROR, logger="core.state"):
+        machine.handle_dependency_returned()
+
+    assert "ainda sem tela" in caplog.text
+
+
+def test_liveness_return_failure_uses_recovery_fallback(
+    fake_systemd, fake_screen, fake_scheduler
+):
+    machine, _events, _systemd, screen, _scheduler = _activated(
+        fake_systemd, fake_screen, fake_scheduler
+    )
+    machine.handle_dependency_lost("sumiu")
+    screen.acquire_raises = RuntimeError()
+
+    machine.handle_dependency_returned()
+
+    assert machine.last_error == "falha ao recuperar a inibição de tela"
+
+
+def test_liveness_return_ignored_when_not_awaiting_dependency_return(
     fake_systemd, fake_screen, fake_scheduler
 ):
     screen = fake_screen(acquire_raises=RuntimeError("falha"))
@@ -571,24 +602,24 @@ def test_liveness_return_ignored_when_not_recovering(
     events.clear()
     calls_before = list(screen.calls)
 
-    machine.handle_screen_returned()
+    machine.handle_dependency_returned()
 
     assert machine.state == "error"
     assert events == []
     assert screen.calls == calls_before
 
 
-def test_explicit_activate_clears_recovering(
+def test_explicit_activate_clears_awaiting_dependency_return(
     fake_systemd, fake_screen, fake_scheduler
 ):
     machine, _events, _systemd, screen, _scheduler = _activated(
         fake_systemd, fake_screen, fake_scheduler
     )
-    machine.handle_screen_lost("sumiu")
+    machine.handle_dependency_lost("sumiu")
 
     machine.activate()
 
-    assert machine._recovering is False
+    assert machine._awaiting_dependency_return is False
     assert machine.state == "on"
 
 
@@ -609,7 +640,7 @@ def test_session_end_stops_child_without_dbus(
     assert "release" not in screen.calls
     assert machine.state == "off"
     assert machine.last_error == ""
-    assert machine._recovering is False
+    assert machine._awaiting_dependency_return is False
     assert events == []
 
 

@@ -53,6 +53,7 @@ def _setup_logging(log_path: str | Path) -> None:
     formatter = logging.Formatter(LOG_FORMAT, LOG_DATE_FORMAT)
     try:
         path = Path(log_path).expanduser()
+        path.parent.mkdir(parents=True, exist_ok=True)
         handler = logging.handlers.RotatingFileHandler(
             path,
             maxBytes=LOG_MAX_BYTES,
@@ -83,20 +84,34 @@ class _Service(dbus.service.Object):
         self._machine = machine
         self._quit_callback = quit_callback
 
+    def _log_repeated_error(self, operation, previous_public, result):
+        if result == "error" and previous_public == "error":
+            logger.error(
+                "%s permaneceu em error: %s",
+                operation,
+                self._machine.last_error,
+            )
+
     @dbus.service.method(INTERFACE, in_signature="b", out_signature="s")
     def SetActive(self, active):
         active = bool(active)
         logger.info("SetActive(%s) solicitado", active)
+        previous_public = self._machine.public_state
         if active:
             result = self._machine.activate()
         else:
             result = self._machine.deactivate()
+        self._log_repeated_error(
+            f"SetActive({active})", previous_public, result
+        )
         logger.info("SetActive(%s) resultou em %s", active, result)
         return result
 
     @dbus.service.method(INTERFACE, in_signature="", out_signature="s")
     def Toggle(self):
+        previous_public = self._machine.public_state
         result = self._machine.toggle()
+        self._log_repeated_error("Toggle()", previous_public, result)
         logger.info("Toggle() resultou em %s", result)
         return result
 
@@ -158,23 +173,16 @@ def main(
     screen = ScreenSaverInhibit(
         bus, debounce=debounce, verify_delay=verify_delay
     )
-    lost: set[str] = set()
+    missing_services: set[str] = set()
     bus_dead = False
     service = None
 
-    def relevant_names() -> set[str]:
-        backend = screen.backend
-        if backend == "fdo":
-            return {BACKEND_BUS_NAMES["fdo"], POLICYAGENT_NAME}
-        if backend == "mate":
-            return {BACKEND_BUS_NAMES["mate"], BACKEND_BUS_NAMES["gsm"]}
-        if backend == "gsm":
-            return {BACKEND_BUS_NAMES["gsm"]}
-        return set()
-
     def on_state_changed(new_state: str) -> None:
         if new_state in ("on", "off"):
-            lost.clear()
+            missing_services.clear()
+        logger.info("estado público: %s", new_state)
+        if new_state == "error":
+            logger.error("motivo do erro: %s", machine.last_error)
         if service is None:
             return
         try:
@@ -189,16 +197,20 @@ def main(
         screen=screen,
     )
 
+    def finish_without_bus(reason: str) -> None:
+        logger.info("%s; encerrando sem chamadas D-Bus", reason)
+        machine.handle_session_end()
+        GLib.idle_add(loop.quit)
+
     def request_quit() -> None:
+        if bus_dead:
+            finish_without_bus("barramento de sessão já encerrado")
+            return
         try:
-            if bus_dead:
-                machine.handle_session_end()
-            else:
-                machine.deactivate()
+            machine.deactivate()
         except Exception as exc:
             logger.warning("falha ao desativar durante o encerramento: %s", exc)
-        finally:
-            GLib.idle_add(loop.quit)
+        GLib.idle_add(loop.quit)
 
     service = _Service(bus, OBJECT_PATH, machine, request_quit)
 
@@ -213,31 +225,29 @@ def main(
     def on_name_owner_changed(name, old_owner, new_owner):
         if name not in WATCHED_NAMES:
             return
-        relevant = relevant_names()
+        relevant = screen.relevant_names()
         if new_owner == "" and old_owner != "":
             if name not in relevant:
                 logger.info("serviço não relevante desapareceu: %s", name)
                 return
-            lost.add(name)
+            missing_services.add(name)
             logger.info("serviço relevante desapareceu: %s", name)
             if (
                 screen.backend == "gsm"
                 and name == BACKEND_BUS_NAMES["gsm"]
                 and machine.public_state == "on"
             ):
-                logger.info("sessão encerrada; parando o daemon sem liberar D-Bus")
-                machine.handle_session_end()
-                GLib.idle_add(loop.quit)
+                finish_without_bus(f"sessão encerrada ({name} desapareceu)")
                 return
-            machine.handle_screen_lost(f"serviço {name} desapareceu")
+            machine.handle_dependency_lost(f"serviço {name} desapareceu")
         elif old_owner == "" and new_owner != "":
             if name not in relevant:
                 logger.info("serviço não relevante reapareceu: %s", name)
                 return
-            lost.discard(name)
+            missing_services.discard(name)
             logger.info("serviço relevante reapareceu: %s", name)
-            if not lost:
-                machine.handle_screen_returned()
+            if not missing_services:
+                machine.handle_dependency_returned()
 
     for name in WATCHED_NAMES:
         bus.add_signal_receiver(
@@ -251,10 +261,10 @@ def main(
 
     def on_disconnected(*_args):
         nonlocal bus_dead
+        if bus_dead:
+            return
         bus_dead = True
-        logger.info("barramento de sessão desconectado; encerrando")
-        machine.handle_session_end()
-        GLib.idle_add(loop.quit)
+        finish_without_bus("barramento de sessão desconectado")
 
     bus.add_signal_receiver(
         on_disconnected,
@@ -265,11 +275,11 @@ def main(
 
     def on_signal(signum):
         logger.info("encerrando por sinal %s", signum)
+        if bus_dead:
+            finish_without_bus(f"sinal {signum}")
+            return GLib.SOURCE_REMOVE
         try:
-            if bus_dead:
-                machine.handle_session_end()
-            else:
-                machine.deactivate()
+            machine.deactivate()
         finally:
             loop.quit()
         return GLib.SOURCE_REMOVE
@@ -292,7 +302,7 @@ def main(
     finally:
         if bus_dead:
             machine.handle_session_end()
-        elif machine.state != "off":
+        elif machine.public_state != "off":
             try:
                 machine.deactivate()
             except Exception as exc:

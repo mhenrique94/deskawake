@@ -8,28 +8,33 @@ import dbus
 import pytest
 
 import core.inhibitors
-from core.environment import BACKEND_BUS_NAMES
-from core.inhibitors import (
+from core.inhibitors import InhibitError, ScreenSaverInhibit, SystemdInhibit
+from dbus_contract import (
+    BACKEND_NAMES,
+    BACKEND_PATHS,
     GSM_IDLE_FLAG,
     POLICYAGENT_CHANGE_SCREEN_SETTINGS,
-    InhibitError,
-    ScreenSaverInhibit,
-    SystemdInhibit,
+    POLICYAGENT_IFACE,
+    POLICYAGENT_NAME,
+    POLICYAGENT_PATH,
+    PROPERTIES_IFACE,
 )
 
-FDO_NAME = BACKEND_BUS_NAMES["fdo"]
-MATE_NAME = BACKEND_BUS_NAMES["mate"]
-GSM_NAME = BACKEND_BUS_NAMES["gsm"]
-PA_NAME = BACKEND_BUS_NAMES["policyagent"]
+FDO_NAME = BACKEND_NAMES["fdo"]
+MATE_NAME = BACKEND_NAMES["mate"]
+GSM_NAME = BACKEND_NAMES["gsm"]
+PA_NAME = POLICYAGENT_NAME
 
-FDO_PATH = "/org/freedesktop/ScreenSaver"
-MATE_PATH = "/org/mate/ScreenSaver"
-GSM_PATH = "/org/gnome/SessionManager"
-PA_PATH = "/org/kde/Solid/PowerManagement/PolicyAgent"
-PA_IFACE = "org.kde.Solid.PowerManagement.PolicyAgent"
-PROPERTIES_IFACE = "org.freedesktop.DBus.Properties"
+FDO_PATH = BACKEND_PATHS["fdo"]
+MATE_PATH = BACKEND_PATHS["mate"]
+GSM_PATH = BACKEND_PATHS["gsm"]
+PA_PATH = POLICYAGENT_PATH
+PA_IFACE = POLICYAGENT_IFACE
 
-MATE_APP = "Application=deskawake; Reason=DeskAwake active;"
+MATE_APP = (
+    'Application="deskawake"; Since="2026-01-01 00:00:00"; '
+    'Reason="DeskAwake active";'
+)
 
 
 def _unknown(name="org.freedesktop.DBus.Error.UnknownMethod"):
@@ -101,6 +106,19 @@ def test_start_raises_with_stderr_when_child_dies(fake_process, fake_popen):
         inhibitor.start()
     assert process.stderr.closed is True
     assert inhibitor.alive is False
+
+
+def test_start_logs_stderr_when_child_dies(fake_process, fake_popen, caplog):
+    process = fake_process(
+        poll_return=1, communicate_result=(b"", b"falha do logind")
+    )
+    fake_popen(process)
+
+    with caplog.at_level(logging.ERROR, logger="core.inhibitors"):
+        with pytest.raises(InhibitError):
+            SystemdInhibit(confirm_delay=0).start()
+
+    assert "falha do logind" in caplog.text
 
 
 def test_start_missing_binary_raises_inhibit_error(fake_popen):
@@ -475,6 +493,20 @@ def test_release_absorbs_dbus_exception(fake_bus):
     assert screen.cookie is None
 
 
+def test_release_propagates_unexpected_exception(fake_bus):
+    bus = fake_bus()
+    screen = _screen_for_backend(bus, "fdo")
+    bus.add_method(
+        (FDO_NAME, FDO_PATH, "UnInhibit"),
+        RuntimeError("bug de programação"),
+    )
+
+    with pytest.raises(RuntimeError):
+        screen.release()
+
+    assert screen.cookie is None
+
+
 # --- ScreenSaverInhibit.confirm / needs_verification -------------------------
 
 
@@ -609,10 +641,13 @@ def test_needs_verification_only_for_kde_fdo(fake_bus):
 
 
 def test_needs_verification_bus_error_is_false(fake_bus):
-    bus = fake_bus(fail_owners={PA_NAME})
+    bus = fake_bus(
+        owners={FDO_NAME},
+        methods={(FDO_NAME, FDO_PATH, "Inhibit"): 1},
+        fail_owners={PA_NAME},
+    )
     screen = _make_screen(bus)
-    screen.backend = "fdo"
-    screen.cookie = 1
+    screen.acquire()
 
     assert screen.needs_verification is False
 

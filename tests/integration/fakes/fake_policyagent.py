@@ -2,7 +2,6 @@
 from __future__ import annotations
 
 import argparse
-import json
 import os
 import sys
 
@@ -11,37 +10,17 @@ import dbus.service
 from dbus.mainloop.glib import DBusGMainLoop
 from gi.repository import GLib
 
-PA_NAME = "org.kde.Solid.PowerManagement"
-PA_PATH = "/org/kde/Solid/PowerManagement/PolicyAgent"
-PA_IFACE = "org.kde.Solid.PowerManagement.PolicyAgent"
-PROPERTIES_IFACE = "org.freedesktop.DBus.Properties"
+from fake_common import JsonlLog
+from dbus_contract import (
+    POLICYAGENT_IFACE,
+    POLICYAGENT_NAME,
+    POLICYAGENT_PATH,
+    PROPERTIES_IFACE,
+)
 
-
-
-def _plain(value):
-    if isinstance(value, dict):
-        return {str(key): _plain(item) for key, item in value.items()}
-    if isinstance(value, (list, tuple)):
-        return [_plain(item) for item in value]
-    if isinstance(value, (str, int, float, bool)) or value is None:
-        return value
-    return str(value)
-
-
-class JsonlLog:
-    def __init__(self, path):
-        self._file = open(path, "a", encoding="utf-8") if path else None
-
-    def write(self, **entry):
-        if self._file is None:
-            return
-        self._file.write(json.dumps(_plain(entry), ensure_ascii=False) + "\n")
-        self._file.flush()
-
-    def close(self):
-        if self._file is not None:
-            self._file.close()
-            self._file = None
+PA_NAME = POLICYAGENT_NAME
+PA_PATH = POLICYAGENT_PATH
+PA_IFACE = POLICYAGENT_IFACE
 
 
 class PolicyAgent(dbus.service.Object):
