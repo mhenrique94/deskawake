@@ -4,8 +4,8 @@ Um widget de desktop que mantém a tela acesa e o sistema acordado enquanto voc�
 
 Funciona em **Linux Mint 22.3 MATE (X11)** e **Kubuntu 26.04 / KDE Plasma 6 (Wayland)**, com um núcleo Python compartilhado e duas interfaces: widget GTK3 no MATE e Plasmoid nativo no Plasma.
 
-> **Status:** especificação aprovada e hidratada para **Linux Mint 22.3 MATE** em 19/11/2026; implementação ainda não iniciada.
-> A especificação completa está em [`spec.md`](spec.md). O backend/UI MATE foi validado nesta máquina; o lado Kubuntu/Plasma 6 segue o contexto original e aguarda revalidação.
+> **Status:** especificação aprovada e hidratada para **Linux Mint 22.3 MATE** e **Kubuntu 26.04 / Plasma 6.6** em 19/11/2026; implementação ainda não iniciada.
+> A especificação completa está em [`spec.md`](spec.md). O backend/UI MATE foi validado na máquina Mint; o backend KDE foi validado no Kubuntu 26.04.1 / Plasma 6.6.7 (Wayland). A GUI do Plasmoid e os testes destrutivos de tampa/suspensão ficam na checklist manual.
 
 ## O que ele faz
 
@@ -26,8 +26,8 @@ A desktop widget that keeps your screen on and your system awake while you need 
 
 Runs on **Linux Mint 22.3 MATE (X11)** and **Kubuntu 26.04 / KDE Plasma 6 (Wayland)**, with a shared Python core and two interfaces: a GTK3 widget on MATE and a native Plasma widget on KDE.
 
-> **Status:** specification approved and hydrated for **Linux Mint 22.3 MATE** on 2026-11-19; implementation not started yet.
-> The full specification lives in [`spec.md`](spec.md) (Brazilian Portuguese). The MATE backend/UI was validated on this machine; the Kubuntu/Plasma 6 side follows the original context and awaits revalidation.
+> **Status:** specification approved and hydrated for **Linux Mint 22.3 MATE** and **Kubuntu 26.04 / Plasma 6.6** on 2026-11-19; implementation not started yet.
+> The full specification lives in [`spec.md`](spec.md) (Brazilian Portuguese). The MATE backend/UI was validated on the Mint machine; the KDE backend was validated on Kubuntu 26.04.1 / Plasma 6.6.7 (Wayland). The Plasmoid GUI and the destructive lid/suspend checks remain in the manual checklist.
 
 ## What it does
 
