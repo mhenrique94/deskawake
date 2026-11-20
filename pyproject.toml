@@ -1,0 +1,10 @@
+[project]
+name = "deskawake"
+version = "0.1.0"
+requires-python = ">=3.10"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+markers = [
+  "slow: testes opt-in de ciclo real (debounce/verificação de ~5-6 s)",
+]
