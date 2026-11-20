@@ -3,6 +3,11 @@ name = "deskawake"
 version = "0.1.0"
 requires-python = ">=3.10"
 
+# gi (PyGObject) e dbus vêm dos pacotes de sistema (python3-gi, python3-dbus):
+# o venv é criado com --system-site-packages e não deve compilá-los do PyPI.
+[dependency-groups]
+dev = ["pytest"]
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 markers = [

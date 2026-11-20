@@ -403,7 +403,7 @@ deskawake ui [--force]
 ## Adendo de implementação — E2 (2026-11-20)
 
 > Este adendo registra a leitura adotada na Phase 2 da E2 para pontos que a spec deixava abertos.
-> **Não altera as decisões 1–33**; detalhes de implementação ficam no `design_e2.md` (transitório)
+> **Não altera as decisões 1–33**; detalhes de implementação ficam no `design_e2.md` (versionado em `docs/implementation/`)
 > e no `DELIVERY_MAP.md` §E2.5.
 
 - **Confirmação no KDE (decisões 29–30):** a degradação para cookie + aviso em log só vale quando
