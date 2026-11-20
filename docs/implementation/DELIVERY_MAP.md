@@ -53,10 +53,11 @@ PR, e **uma entrega = um PR**.
   precisam estar preenchidas. PR verde no gate não substitui o gate: é o mesmo critério.
 - **Correção pós-merge:** abrir `fix(eN): ...` em novo PR (`fix/eN-<resumo>`). Nunca corrigir
   direto na `main`.
-- **Higiene:** commits e PRs contêm apenas a entrega. `design_e*.md` fica fora do Git (já em
-  `.git/info/exclude`); `DELIVERY_MAP.md` é artefato de execução e não entra nos PRs de entrega
-  (se for versionado, vai em PR `docs:` próprio); `spec.md` não é alterado pelas entregas.
-  A E6 é a exceção de documentação: entrega `README.md` e `README.en.md`.
+- **Higiene:** commits e PRs de entrega contêm apenas a entrega de código. A documentação de
+  implementação (`spec.md`, `DELIVERY_MAP.md`, `design_e*.md`, `tasks_e*.md` e `visual/`) fica
+  versionada em `docs/implementation/` e entra em PR/commit `docs:` separado; `spec.md` não é
+  alterado pelas entregas. A E6 é a exceção de documentação de usuário: entrega `README.md` e
+  `README.en.md`.
 - **Commits:** `feat(eN): <resumo em pt-BR, imperativo>` (ex.: `feat(e1): adiciona config e
   detecção de ambiente`). Commits intermediários são permitidos; o PR é que precisa fechar verde.
 
@@ -118,8 +119,13 @@ deskawake/
 ├── LICENSE
 ├── README.md
 ├── README.en.md
-├── spec.md
-├── DELIVERY_MAP.md
+├── docs/
+│   └── implementation/
+│       ├── spec.md
+│       ├── DELIVERY_MAP.md
+│       ├── design_e1.md … design_e4.md
+│       ├── tasks_e1.md … tasks_e4.md
+│       └── visual/                 # design aprovado + assets/preview
 ├── pyproject.toml                  # só [tool.pytest.ini_options] + marker "slow"
 ├── bin/
 │   └── deskawake                   # launcher Python (calcula sys.path a partir de __file__)
@@ -550,7 +556,8 @@ systemd-inhibit --list | grep -i deskawake   # aparece durante os 3 s
 
 A spec e este mapa deixavam pontos abertos que mudavam contratos da E2. Eles foram resolvidos com
 o usuário antes do design e **não alteram o produto** da `spec.md` — apenas fixam a leitura
-adotada. O design completo está em `design_e2.md` (transitório), **aprovado em 2026-11-20**.
+adotada. O design completo está em `design_e2.md` (versionado em `docs/implementation/`),
+**aprovado em 2026-11-20**.
 
 | # | Tema | Decisão confirmada |
 |---|---|---|
