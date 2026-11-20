@@ -3,6 +3,7 @@ from __future__ import annotations
 import itertools
 import json
 import os
+import shutil
 import signal
 import subprocess
 import sys
@@ -366,11 +367,80 @@ def _connect(address):
     return bus
 
 
-def session_bus():
-    address = os.environ.get("DBUS_SESSION_BUS_ADDRESS")
+TEST_BUS_CONFIG = REPO_ROOT / "tests/dbus-session.conf"
+
+# Barramento privado sem ativação de serviços do host: mate-screensaver e
+# PowerDevil não podem "vazar" para os testes. O modo real (-m slow ou
+# DESKAWAKE_TEST_REAL_BUS=1) usa o barramento da sessão para o ciclo opt-in.
+_test_bus_proc = None
+_test_bus_addr = None
+_use_real_bus = False
+
+
+def pytest_configure(config):
+    global _use_real_bus
+    markexpr = (config.getoption("markexpr", default="") or "").strip()
+    _use_real_bus = (
+        os.environ.get("DESKAWAKE_TEST_REAL_BUS") == "1" or markexpr == "slow"
+    )
+
+
+def pytest_sessionfinish(session, exitstatus):
+    global _test_bus_proc, _test_bus_addr
+    proc = _test_bus_proc
+    _test_bus_proc = None
+    _test_bus_addr = None
+    if proc is not None and proc.poll() is None:
+        proc.terminate()
+        try:
+            proc.wait(timeout=3)
+        except subprocess.TimeoutExpired:
+            proc.kill()
+            proc.wait(timeout=3)
+    if proc is not None and proc.stdout is not None:
+        proc.stdout.close()
+
+
+def _ensure_test_bus():
+    global _test_bus_proc, _test_bus_addr
+    if _test_bus_addr is not None:
+        return _test_bus_addr
+    if shutil.which("dbus-daemon") is None:
+        pytest.skip("teste de integração requer dbus-daemon")
+    proc = subprocess.Popen(
+        [
+            "dbus-daemon",
+            "--nofork",
+            "--print-address",
+            f"--config-file={TEST_BUS_CONFIG}",
+        ],
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+    )
+    address = (proc.stdout.readline() or "").strip()
     if not address:
-        pytest.skip("teste de integração requer dbus-run-session")
-    return _connect(address)
+        proc.kill()
+        stderr = proc.communicate()[1].strip()
+        pytest.skip(f"não foi possível iniciar o barramento de teste: {stderr}")
+    _test_bus_proc = proc
+    _test_bus_addr = address
+    os.environ["DBUS_SESSION_BUS_ADDRESS"] = address
+    os.environ.pop("DBUS_SESSION_BUS_PID", None)
+    return address
+
+
+def _test_bus_address():
+    if _use_real_bus:
+        address = os.environ.get("DBUS_SESSION_BUS_ADDRESS")
+        if not address:
+            pytest.skip("teste real requer sessão D-Bus ativa")
+        return address
+    return _ensure_test_bus()
+
+
+def session_bus():
+    return _connect(_test_bus_address())
 
 
 def read_jsonl(path):
@@ -475,6 +545,8 @@ def _start_fake(script, flags, log_path, names, env_extra=None, timeout=5.0, lab
     env = os.environ.copy()
     if env_extra:
         env.update({key: str(value) for key, value in env_extra.items()})
+    if "DBUS_SESSION_BUS_ADDRESS" not in (env_extra or {}):
+        env["DBUS_SESSION_BUS_ADDRESS"] = _test_bus_address()
     proc = subprocess.Popen(
         command,
         cwd=REPO_ROOT,
@@ -620,6 +692,10 @@ def start_daemon(
     env["HOME"] = str(home_path)
     if env_extra:
         env.update({key: str(value) for key, value in env_extra.items()})
+    explicit_address = (env_extra or {}).get("DBUS_SESSION_BUS_ADDRESS")
+    if address is None:
+        address = str(explicit_address) if explicit_address else _test_bus_address()
+    env["DBUS_SESSION_BUS_ADDRESS"] = address
     try:
         proc = subprocess.Popen(
             [sys.executable, "-c", code],
