@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Name=DeskAwake
+Comment=Widget DeskAwake
+Exec=@EXEC@ ui
+Terminal=false
+NoDisplay=true
+OnlyShowIn=MATE;
+X-GNOME-Autostart-enabled=true
