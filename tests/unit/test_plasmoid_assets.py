@@ -417,6 +417,12 @@ def test_main_qml_quit_contract():
 
     assert "daemonWatcher.registered" in body
     assert "!daemonWatcher.registered || root.callPending" in body
+    assert "const newState = String(reply.value)" in body
+    assert "applyState(newState)" in body
+    assert 'if (newState === "error")' in body
+    assert "requestLastError()" in body
+    assert body.index("applyState(newState)") < body.index("requestLastError()")
+    assert body.index("requestLastError()") < body.index("sendQuit()")
     assert body.index("stopVerification()") < body.index('member: "Quit"')
     assert body.index('member: "SetActive"') < body.index('member: "Quit"')
     assert body.index("new DBus.bool(false)") < body.index('member: "Quit"')

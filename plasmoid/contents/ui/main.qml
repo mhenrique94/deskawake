@@ -869,7 +869,12 @@ PlasmoidItem {
                 return
             }
             root.callPending = false
-            root.applyState(String(reply.value))
+            const newState = String(reply.value)
+            root.applyState(newState)
+            // Sair pode retornar error; buscar o motivo antes de encerrar o daemon.
+            if (newState === "error") {
+                root.requestLastError()
+            }
             sendQuit()
         }, function (error) {
             if (token !== root.callToken) {
