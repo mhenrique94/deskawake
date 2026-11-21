@@ -4,9 +4,16 @@
 > **Kubuntu 26.04.1 / KDE Plasma 6.6.7 (Wayland)** e **Linux Mint 22.3 “Zena” / MATE 1.26 (X11)**.
 >
 > Este documento **organiza a execução** e **não decide nada novo**. Toda decisão, valor, contrato,
-> string e restrição vem da `spec.md` (decisões 1–33, “Fluxo alvo”, “Contratos”, “Notas ao
+> string e restrição vem da `spec.md` (decisões 1–38, “Fluxo alvo”, “Contratos”, “Notas ao
 > implementador”, “Variações por distro” e apêndices de validação). Em caso de conflito entre este
 > mapa e a spec, **a spec vence** — e o mapa é corrigido, não a spec.
+
+> **Reprogramação (2026-11-21):** a antiga “E6 — instalador” foi dividida. **E6 = UI GTK/MATE**
+> (ajustes, paridade visual e créditos), **E7 = instalação/desinstalação/verificação/testes/docs** e
+> **E8 = empacotamento/distribuição** (placeholder). Onde as seções históricas de E1–E5 dizem “E6”
+> para instalador, READMEs ou `.service`, leia **E7**; onde dizem “E6” para UI/validação MATE, leia
+> **E6**. Os designs completos estão em [`design_e6.md`](design_e6.md), [`design_e7.md`](design_e7.md)
+> e [`design_e8.md`](design_e8.md).
 
 ---
 
@@ -16,8 +23,9 @@
   nasce da branch da anterior (`E2` sobre `E1`, `E3` sobre `E2`, `E4` sobre `E3`).
 - **E5 (Plasmoid/KDE)** é **independente da E4**: empilha sobre a **E3** e consome apenas o contrato
   D-Bus do daemon. E4 e E5 podem ser feitas em paralelo ou em qualquer ordem.
-- **E6** fecha o ciclo e depende de E1–E5 para aceite final (instala artefatos reais), embora
-  `bash -n`/`shellcheck` possam rodar antes.
+- **E6 (UI GTK/MATE)** depende de E1–E5 e fecha a parte visual/funcional do MATE (A1–A7 na UI,
+  créditos e versão). **E7 (instalação)** depende da E6 e instala artefatos reais. **E8
+  (distribuição)** depende da E7 e está como placeholder decisório.
 - Cada entrega termina com um **gate**: suíte da entrega verde + critérios de aceite abaixo.
   Nenhuma entrega “adiada para a próxima” — o que não pertence ao escopo é explicitamente listado
   como **fora de escopo**.
@@ -32,7 +40,8 @@
   (7.4.4 no Mint, 9.0.2 no Kubuntu) e executada como `python3 -m pytest`. **Nunca** instalada pelo
   `install.sh`.
 - Nada de `sudo` em qualquer script entregue ao usuário.
-- Sem empacotamento de distro (`.deb`, AUR, Flatpak). `pyproject.toml` existe **só** para configurar
+- Sem empacotamento de distro na E7 (`.deb`, AUR, Flatpak). O `.deb` via GitHub Releases é a **E8**
+  (placeholder); AUR/Flatpak/AppImage ficam fora. `pyproject.toml` existe **só** para configurar
   `pytest`.
 - Sem suporte a Windows/macOS; sem testes de GUI automatizados (comportamento visual é checklist
   manual, conforme convenção da spec).
@@ -44,20 +53,20 @@ PR, e **uma entrega = um PR**.
 
 - **Base:** entregas **empilhadas** `E1 → E2 → E3 → E4`: cada branch nasce da branch da entrega
   anterior e o PR aponta para ela (`E2` → `E1`, `E3` → `E2`, `E4` → `E3`). **E5** empilha sobre a
-  **E3** (mesma base da E4; E4 e E5 podem ficar abertos ao mesmo tempo, em qualquer ordem);
-  **E6** só abre depois de E4 e E5 mergeadas, com base na `main` já contendo as duas.
+  **E3** (mesma base da E4; E4 e E5 podem ficar abertos ao mesmo tempo, em qualquer ordem).
+  **E6** nasce da `main` após E4 e E5 mergeadas; **E7** nasce da `main` após a E6; **E8** nasce da
+  `main` após a E7.
 - **Merge:** merge commit pelo GitHub (`Merge pull request #N from ...`), como no histórico atual.
   Sem squash e sem reescrever branch de outra pessoa.
-- **Gate antes do merge:** o gate da entrega (G-E1…G-E6) precisa estar verde **no PR** — comandos
-  executados e resultado colados na descrição; checklists manuais exigidas pela entrega (E4/E5/E6)
+- **Gate antes do merge:** o gate da entrega (G-E1…G-E8) precisa estar verde **no PR** — comandos
+  executados e resultado colados na descrição; checklists manuais exigidas pela entrega (E4/E5/E6/E7)
   precisam estar preenchidas. PR verde no gate não substitui o gate: é o mesmo critério.
 - **Correção pós-merge:** abrir `fix(eN): ...` em novo PR (`fix/eN-<resumo>`). Nunca corrigir
   direto na `main`.
 - **Higiene:** commits e PRs de entrega contêm apenas a entrega de código. A documentação de
   implementação (`spec.md`, `DELIVERY_MAP.md`, `design_e*.md`, `tasks_e*.md` e `visual/`) fica
-  versionada em `docs/implementation/` e entra em PR/commit `docs:` separado; `spec.md` não é
-  alterado pelas entregas. A E6 é a exceção de documentação de usuário: entrega `README.md` e
-  `README.en.md`.
+  versionada em `docs/implementation/` e entra em PR/commit `docs:` separado. A **E7** é a exceção
+  de documentação de usuário: entrega `README.md` e `README.en.md`. A E6 não entrega README.
 - **Commits:** `feat(eN): <resumo em pt-BR, imperativo>` (ex.: `feat(e1): adiciona config e
   detecção de ambiente`). Commits intermediários são permitidos; o PR é que precisa fechar verde.
 
@@ -68,7 +77,9 @@ PR, e **uma entrega = um PR**.
 | **E3** | `feat/e3-cli-launcher` | `feat(e3): CLI e launcher` |
 | **E4** | `feat/e4-widget-gtk-mate` | `feat(e4): widget GTK3 para MATE/X11` |
 | **E5** | `feat/e5-plasmoid-kde` | `feat(e5): Plasmoid para Plasma 6.6` |
-| **E6** | `feat/e6-instalador-verificacao-docs` | `feat(e6): instalador, verificação e documentação` |
+| **E6** | `feat/e6-ui-gtk-mate` | `feat(e6): ajustes, paridade visual e créditos do GTK/MATE` |
+| **E7** | `feat/e7-instalador-verificacao-docs` | `feat(e7): instalador, verificação e documentação` |
+| **E8** | `feat/e8-distribuicao` | `feat(e8): empacotamento e distribuição` (placeholder) |
 
 **Corpo do PR (template):**
 
@@ -83,7 +94,7 @@ PR, e **uma entrega = um PR**.
 
 ---
 
-## 1. Restrições globais (valem para E1–E6)
+## 1. Restrições globais (valem para E1–E8)
 
 | # | Restrição | Valor exato |
 |---|---|---|
@@ -175,7 +186,7 @@ deskawake/
         └── test_lifecycle.py       # SIGTERM, Quit, PDEATHSIG, Local.Disconnected
 ```
 
-Instalado no usuário (produzido pela E6, não versionado em `~/.local`):
+Instalado no usuário (produzido pela E7, não versionado em `~/.local`):
 
 ```
 ~/.local/share/deskawake/{core,ui_gtk,assets,bin}
@@ -874,7 +885,7 @@ depender de `Plasma5Support`, `gdbus` ou polling.
 **Explicitamente fora da E5**
 
 - GTK, MATE, X11 (E4).
-- Instalação do pacote (`kpackagetool6 -i/--upgrade`), autostart e `.service` (E6).
+- Instalação do pacote (`kpackagetool6 -t Plasma/Applet -i/-u`), autostart e `.service` (E7).
 - Backend KDE (já entregue na E2).
 - Testes de GUI (checklist manual).
 - `config.json`/posição persistida pelo app.
@@ -937,7 +948,7 @@ python3 -m pytest tests/unit/test_plasmoid_assets.py -v
 
 **Manual — Kubuntu 26.04 / Plasma 6.6 Wayland (da spec)**
 
-- [ ] `kpackagetool6 -i ./plasmoid` instala em `~/.local/share/plasma/plasmoids/org.local.deskawake/`;
+- [ ] `kpackagetool6 -t Plasma/Applet -i ./plasmoid` instala em `~/.local/share/plasma/plasmoids/org.local.deskawake/`;
       `--upgrade` atualiza; reexecutar `./install.sh --all` não falha.
 - [ ] Plasmoid na área de trabalho mostra 124×42, atrás das janelas, visível com a área à mostra.
 - [ ] Press-and-hold move; clique rápido no toggle alterna e não move; com “Widgets travados” não
@@ -960,27 +971,125 @@ python3 -m pytest tests/unit/test_plasmoid_assets.py -v
 
 ---
 
-# E6 — Instalador, Desinstalador, Verificação, Testes e Docs
+# E6 — UI GTK/MATE: Ajustes, Paridade e Créditos
 
 ## E6.1 Objetivo e escopo exato
 
-Fechar o produto para o usuário final: instalar de forma idempotente e tolerante a ambiente
-incompleto, desinstalar sem resíduos, verificar em um comando, consolidar a suíte de testes e
-documentar uso, diagnóstico e limitações — incluindo as duas checklists manuais.
+Fechar a diferença de acabamento entre o widget GTK e o Plasmoid repaginado, resolver os achados
+A1–A7 que pertencem à UI e entregar os créditos no widget — **sem** copiar o que é específico do
+Plasma e sem tocar no QML do KDE. Esta entrega é a antiga “parte de UI” que faltava na E4; o
+instalador virou E7 e o empacotamento virou E8.
 
 **Inclui**
 
 | Arquivo | Responsabilidade |
 |---|---|
-| `data/org.local.DeskAwake.service` | ativação D-Bus (`Exec=` absoluto, `Name=org.local.DeskAwake`) |
+| `ui_gtk/widget.py` | A1 (`_NET_SHOWING_DESKTOP`), tooltip estruturado, ciclo do `last_error`, retry de assinatura D-Bus, acessibilidade, item `Sobre` e `Gtk.AboutDialog` |
+| `ui_gtk/theme.py` | knob `#20252B` fixo, hover/pressed/cursor e `format_error_tooltip` puro |
+| `core/__init__.py` | `__version__ = "0.1.0"` (fonte única) |
+| `tests/unit/test_version.py` | sincronia `core.__version__` × `pyproject.toml` × `plasmoid/metadata.json` |
+| `tests/unit/test_theme.py` / `test_ui_assets.py` | tokens, tooltip, menu `Sobre`, ausência de `DESKTOP` |
+| `spec.md` / docs | emendas das decisões 8, 14, 16, 19 e 34–38 |
+
+**Diferenças intencionais que permanecem:** 124×42 fixo, menu completo (`Tema ▸`, autostart,
+`Sobre`), sem hamburguer, sem resize, sem sampling de wallpaper e sem spinner de verificação de ~6 s.
+O GTK é a UI do MATE; o Plasmoid continua a referência de qualidade visual, não de layout.
+
+**Explicitamente fora da E6**
+
+- Instalador, `verify.sh`, autostart instalado, `.service` e READMEs (E7).
+- `.deb`, GitHub Releases e CI (E8).
+- Qualquer mudança de QML, backend, daemon, CLI, contrato D-Bus ou `config.json`.
+- Testes automatizados de GUI; teclado como requisito; traduções `.po`.
+
+## E6.2 Dependências prévias
+
+- **E1–E5 mergeadas** (PRs #4, #5, #7, #8 e #10); o Plasmoid repaginado é a referência visual.
+- **Mint 22.3 MATE/X11** disponível para a checklist manual; a máquina desta sessão é
+  Ubuntu/Plasma/Wayland e não substitui a validação física.
+
+## E6.3 Pontos críticos e armadilhas
+
+1. **Paridade não é cópia:** não adicionar resize, hamburguer, sombra ou chip de wallpaper ao GTK;
+   o contrato GTK continua 124×42 e menu completo.
+2. **A1 com guarda:** observar `_NET_SHOWING_DESKTOP` e reexibir **uma vez** por transição; se o WM
+   reocultar, houver flicker ou o arrasto quebrar, remover o observador e documentar a limitação.
+   **Nunca** usar `WindowTypeHint.DESKTOP`.
+3. **Knob fixo:** `#20252B` nas duas variantes; o trilho mantém as cores de estado.
+4. **Tooltip escapado:** `set_tooltip_markup` + `GLib.markup_escape_text`; nunca interpolar o erro
+   cru em markup.
+5. **`last_error` limpo:** sair de `error` zera o motivo e o tooltip; entrar em `error` relê
+   `GetLastError()`.
+6. **Retry de D-Bus é só de assinatura:** no máximo 5 tentativas, canceladas no `destroy`; não é
+   polling de estado.
+7. **Acessibilidade mínima:** `get_accessible().set_name(...)` na janela e no switch; não habilitar
+   foco de teclado.
+8. **A6 com mouse real:** XTest não é prova; se o submenu `Tema` fechar, investigar o consumo de
+   `button-release` pelo arrasto.
+9. **About sem ©/CNPJ:** o símbolo © e a linha legal ficam no `LICENSE`; o About mostra autor, site
+   e MIT.
+10. **Versão única:** `core.__version__` é a fonte; o teste de sincronia falha se
+    `pyproject.toml`/`metadata.json` divergirem.
+11. **KDE intocado:** nenhum QML; mudanças em `metadata.json`/`assets/` são da E7 e passam por
+    `test_plasmoid_assets.py`.
+
+## E6.4 Critérios de aceite e verificação
+
+**Automático**
+
+```bash
+python3 -m pytest tests/unit -q
+dbus-run-session -- python3 -m pytest tests/integration -q
+python3 -m pytest tests/unit/test_version.py tests/unit/test_theme.py tests/unit/test_ui_assets.py -v
+```
+
+- [ ] Baseline preservado (267 unit + 34 integração/1 skip) sem regressões.
+- [ ] Sincronia de versão verde.
+- [ ] Tokens do knob/hover e `format_error_tooltip` cobertos.
+- [ ] Menu com `Sobre`, ausência de `WindowTypeHint.DESKTOP`, presença de `_NET_SHOWING_DESKTOP`,
+      `pointer`, `get_accessible().set_name` e `markup_escape_text`.
+- [ ] Nenhum teste de GUI; nenhuma dependência nova.
+
+**Manual — Mint 22.3 MATE/X11 (obrigatório)**
+
+- [ ] 124×42, canto superior direito, 24 px, sem decoração; fora de `Alt+Tab`/barra/pager; todos os
+      workspaces.
+- [ ] **A1:** Ctrl+Alt+D mantém o widget visível e clicável; se o fallback for acionado, a limitação
+      está documentada.
+- [ ] Arrasto de qualquer ponto; clique no toggle alterna; knob legível no tema claro/escuro.
+- [ ] Hover/pressed e cursor `pointer`; spinner na chamada; compositor sólido/translúcido.
+- [ ] Menu: `Ativar/Desativar`, `Tema ▸`, `Iniciar com o sistema`, `Sobre o DeskAwake…`, `Sair`.
+- [ ] `Sobre`: `0.1.0`, `Marcelo Silva`, `manivasoftware.com.br`, MIT; sem ©/CNPJ.
+- [ ] `Sair`/`kill -9` sem órfãos; idle/lock; tema `Mint-Y` ↔ `Mint-Y-Dark`; fallback de fonte.
+- [ ] `error` com tooltip e preservação do filho do `systemd-inhibit`; **A6** com mouse real;
+      **A7** registrado no PR/README.
+
+---
+
+# E7 — Instalação, Desinstalação, Verificação, Testes e Documentação
+
+## E7.1 Objetivo e escopo exato
+
+Fechar o produto para o usuário final: instalar de forma idempotente e tolerante a ambiente
+incompleto, desinstalar sem resíduos, verificar em um comando, consolidar a suíte de testes e
+documentar uso, diagnóstico e limitações — incluindo as duas checklists manuais e os créditos. Sem
+empacotamento de distro, sem `sudo` e sem instalar `pytest` para o usuário final.
+
+**Inclui**
+
+| Arquivo | Responsabilidade |
+|---|---|
+| `data/org.local.DeskAwake.service` | ativação D-Bus (`Exec=@EXEC@ daemon`) |
 | `data/deskawake-daemon.desktop` | autostart do daemon (os dois DEs) |
 | `data/deskawake-widget.desktop` | autostart do widget GTK (**só MATE**) |
 | `install.sh` | cópia, launcher, `.service`, autostart, Plasmoid, flags, deps |
 | `uninstall.sh` | `Quit()` + fallback por PID, remoção idempotente, `--purge` |
 | `verify.sh` | liga/desliga e inspeciona locks, estado D-Bus e órfãos |
-| `tests/` | consolidação: unitários + integração + fakes + `@pytest.mark.slow` |
-| `README.md` | pt-BR: uso, instalação, diagnóstico, checklists, limitações |
-| `README.en.md` | inglês, espelhando o pt-BR |
+| `tests/unit/test_scripts.py` | contrato estático dos scripts/templates/READMEs/créditos |
+| `tests/integration/test_installer_scripts.py` | smoke em `HOME` isolado |
+| `README.md` + `README.en.md` | uso, instalação, diagnóstico, checklists, limitações e créditos |
+| `LICENSE` | razão social + CNPJ |
+| `plasmoid/metadata.json` | `Authors`/`Website`/`Copyright` (sem ©), aditivo |
 
 **Flags e contratos dos scripts**
 
@@ -993,127 +1102,107 @@ documentar uso, diagnóstico e limitações — incluindo as duas checklists man
 | `--purge` (`uninstall.sh`) | Remove também `~/.config/deskawake/`. |
 | (sem flag) | Idempotente: reexecutar não falha. |
 
-**Instalação idempotente do Plasmoid:** se já registrado, `kpackagetool6 --upgrade`; senão
-`kpackagetool6 -i`. Nunca remover/reinstalar cegamente.
+**Instalação idempotente do Plasmoid:** se já registrado, `kpackagetool6 -t Plasma/Applet --upgrade`;
+senão `-i`. Nunca remover/reinstalar cegamente.
 
 **`verify.sh`** (contrato de saída legível, exit ≠ 0 em falha):
 
-- Liga (`on`) e confirma `systemd-inhibit --list` contendo `deskawake` + `GetState()=="on"`.
+- Liga (`on`) e confirma `systemd-inhibit --list` contendo `DeskAwake` + `GetState()=="on"`.
 - Desliga (`off`) e confirma lock ausente + `GetState()=="off"`.
 - Não deixa órfãos (`systemd-inhibit --list` limpo após `off`).
-- **MATE:** `GetInhibitors` contém a aplicação e `IsInhibited(8)` verdadeiro enquanto ON.
+- **MATE:** `GetInhibitors` contém `deskawake`; `mate-screensaver-command -q` quando existir;
+  **não** exige `IsInhibited(8)`.
 - **KDE:** aguarda ~6 s e confere `ActiveInhibitions`/`HasInhibition(4)`; confirma que `UnInhibit`
-  do `ScreenSaver` libera.
+  do `ScreenSaver` libera. **Nunca** `CanSuspend`.
 
 **`tests/` — consolidação final**
 
 - Unitários: config/posição, parser de ambiente, seleção de backend, comando do `systemd-inhibit`,
-  máquina de estados, falhas parciais (all-or-nothing), liberação de locks, CLI, assets do Plasmoid.
+  máquina de estados, falhas parciais, liberação de locks, CLI, assets do Plasmoid, versão.
 - Integração: `dbus-run-session` + ScreenSaver/PolicyAgent falsos; contrato D-Bus; cadeia de
   backends; ON otimista e as três rotas rápidas; queda/retorno do PowerDevil; `SIGTERM`;
-  `PDEATHSIG`; `Quit()`; `Local.Disconnected`.
+  `PDEATHSIG`; `Quit()`; `Local.Disconnected`; scripts em sandbox.
 - **Cookie:** teste **condicional ao backend** — no MATE e no KDE/kwin verificar que o cookie morre
-  com a conexão e que outra conexão consegue `UnInhibit` (comportamento documentado); **sem** teste
-  universal de ownership.
+  com a conexão e que outra conexão consegue `UnInhibit`; **sem** teste universal de ownership.
 - **`@pytest.mark.slow`** opt-in para o ciclo real de 5–6 s; padrão da suíte **não** roda slow.
-- Timeouts injetáveis com padrão 5 s/6 s, restaurados no teardown.
 
-**Explicitamente fora da E6**
+**Explicitamente fora da E7**
 
-- Qualquer mudança de decisão da spec (backend, tamanho, cores, textos, fluxo).
-- Empacotamento `.deb`/AUR/Flatpak; instalação system-wide; `sudo`.
+- Qualquer mudança em `core/`, `ui_gtk/`, `plasmoid/contents/` ou `bin/deskawake`.
+- Empacotamento `.deb`/AUR/Flatpak; instalação system-wide; `sudo` — **E8**.
 - Testes de GUI automatizados.
-- Persistência de estado entre sessões (estado sempre nasce `off`).
+- Persistência de estado entre sessões; `config.json` criado pelo instalador.
 - Instalar `pytest` para o usuário final.
 
-## E6.2 Dependências prévias
+## E7.2 Dependências prévias
 
-- **E1–E5 concluídas** para aceite final: os scripts instalam e verificam artefatos reais.
+- **E6 concluída** (UI GTK/MATE congelada, versão e créditos).
+- **E1–E5** para aceite final: os scripts instalam e verificam artefatos reais.
 - Mint 22.3 (sem `kpackagetool6`, sem `shellcheck`) e Kubuntu 26.04.1 (`kpackagetool6` 2.0, sem
   `shellcheck`, `python3-pytest` 9.0.2 no apt) disponíveis para validação.
 - `dbus-run-session`, `gdbus`, `xprop`/`wmctrl` presentes no Mint.
 
-## E6.3 Pontos críticos e armadilhas
+## E7.3 Pontos críticos e armadilhas
 
 1. **Detectar alvo por ferramenta, não por distro:** a decisão é `command -v kpackagetool6`, nunca
    `lsb_release`/`/etc/os-release`. Mint pode ganhar `kpackagetool6` no futuro; Kubuntu pode perdê-lo.
 2. **`--all` no Mint não é erro:** degradar com aviso e **deixar claro** que daemon+GTK foram
    instalados. Exit 0. Já `--only-kde` sem a ferramenta é erro explícito (exit ≠ 0).
 3. **`uninstall.sh` tolera `kpackagetool6` ausente:** remover o diretório do Plasmoid se existir e
-   **não** falhar se a ferramenta não existir (caso comum no Mint).
+   **não** falhar se a ferramenta não existir.
 4. **`--install-deps` nunca chama `sudo`:** imprime comandos para o usuário executar. Separar
-   obrigatórios de `fonts-inter` (opcional, sugestão não bloqueante) e verificar ao final
-   `python3`/`gi`/`dbus`/`systemd-inhibit`/`kpackagetool6`/`gdbus`. Ausência de `kpackagetool6` é
-   **aviso**, não falha, quando o alvo é MATE. A lista impressa é a da spec (inclui
-   `kpackagetool6`); no Mint, onde o pacote não existe nos repos, o script apenas registra no aviso
-   final que o alvo KDE está indisponível — não remove a linha da lista nem tenta instalar nada.
+   obrigatórios de `fonts-inter` e verificar ao final.
 5. **Idempotência do Plasmoid:** `kpackagetool6 -i` na segunda execução pode falhar com “already
-   installed”; detectar e usar `--upgrade`. O aceite é rodar `./install.sh --all` duas vezes.
-6. **Caminhos absolutos no `.service` e nos `.desktop`:** `Exec=` deve apontar para
-   `~/.local/share/deskawake/bin/deskawake daemon` (ou wrapper absoluto em `~/.local/bin`). Caminho
-   relativo quebra na ativação D-Bus, que não herda o CWD do repo.
-7. **Launcher wrapper:** `~/.local/bin/deskawake` deve ser um wrapper **absoluto** (não symlink para
-   o repo), senão remover o repo quebra a instalação.
-8. **`Quit()` + fallback por PID:** `uninstall.sh` chama `Quit()`; se o daemon não responder, lê o
-   PID e encerra. Nunca `pkill -f deskawake` cego (pode matar o próprio script).
+   installed”; detectar e usar `--upgrade`/`-u` com `-t Plasma/Applet`.
+6. **Caminhos absolutos no `.service` e nos `.desktop`:** `Exec=` aponta para
+   `$SHARE/bin/deskawake`, nunca para o CWD do repo.
+7. **Launcher wrapper absoluto:** não symlink; remover o repo não pode quebrar a instalação.
+8. **`Quit()` + fallback por PID:** nunca `pkill -f deskawake` cego.
 9. **Não remover `~/.config/deskawake/` sem `--purge`** (decisão 18).
-10. **`verify.sh` no KDE precisa esperar ~6 s:** conferir imediatamente sempre falha por causa do
-    debounce de ~5 s. **Não** usar `CanSuspend` como teste.
-11. **`systemd-inhibit --list` mostra `who`:** o `--who=DeskAwake` é o que o `verify.sh` procura;
-    garantir que o `--why` descritivo não substitui o `who`.
-12. **`shellcheck` ausente nas duas máquinas validadas:** o aceite é `shellcheck` **quando
-    disponível**; sempre rodar `bash -n` como piso.
-13. **Testes de integração não podem vazar processos:** cada teste fecha daemon e filhos; usar
-    `dbus-run-session` por sessão de teste e `finally`/fixture para matar grupos.
-14. **`@pytest.mark.slow` declarado no `pyproject.toml`** para não gerar warning; suíte padrão
-    (`python3 -m pytest`) não inclui slow.
-15. **Docs não prometem o que não existe:** deixar explícito que tampa e suspensão manual continuam
-    suspendendo com ON, que o KDE leva ~5 s para refletir a inibição, que o Plasmoid é adicionado
-    manualmente (“Adicionar widgets”) e que a GUI é validada por checklist manual.
-16. **README em dois idiomas:** `README.md` (pt-BR) e `README.en.md` (inglês) com o mesmo conteúdo
-    normativo; o `README.md` atual aponta para `spec.md` e pode ser reescrito, mas não pode
-    contradizer a spec.
-17. **Checklists manuais no README:** copiar as duas listas da spec (MATE e Kubuntu) sem “resumir”
-    itens destrutivos ou de tema.
+10. **`verify.sh` no KDE espera ~6 s:** conferir imediatamente sempre falha pelo debounce; **não**
+    usar `CanSuspend`.
+11. **`verify.sh` no MATE não usa `IsInhibited(8)`:** `GetInhibitors` + `mate-screensaver-command`.
+12. **`shellcheck` ausente:** `bash -n` sempre; shellcheck quando disponível.
+13. **Testes de integração não podem vazar processos:** `dbus-run-session` e fixture de limpeza.
+14. **Docs não prometem o que não existe:** tampa/suspensão manual, debounce de ~5 s, Plasmoid
+    manual, `kpackagetool6` ausente no Mint, A1 conforme a E6.
+15. **Créditos nos quatro lugares:** LICENSE (razão social + CNPJ), README (linha legal), metadata
+    (`Authors`/`Website`/`Copyright` sem ©) e About do GTK (E6).
+16. **Versão única:** README e `.deb` (E8) leem `core.__version__`; não duplicar `0.1.0`.
 
-## E6.4 Critérios de aceite e verificação
+## E7.4 Critérios de aceite e verificação
 
 **Sintaxe e lint**
 
 ```bash
 bash -n install.sh uninstall.sh verify.sh
-shellcheck install.sh uninstall.sh verify.sh    # quando disponível (ausente nas máquinas validadas)
+shellcheck install.sh uninstall.sh verify.sh    # quando disponível
 ```
 
 - [ ] `bash -n` limpo nos três scripts.
-- [ ] `shellcheck` limpo ou desvio documentado (ausente no Mint e no Kubuntu validados).
+- [ ] `shellcheck` limpo ou desvio documentado.
 
 **Instalação — Mint 22.3 MATE**
 
-- [ ] `./install.sh --only-mate` instala daemon+GTK, cria `.service`, autostart do daemon e do
-      widget, launcher em `~/.local/bin`.
-- [ ] `./install.sh --all` no Mint: instala daemon+GTK, avisa “KDE indisponível:
-      `kpackagetool6` ausente”, exit **0**, e a mensagem deixa claro que daemon+GTK foram instalados.
-- [ ] `./install.sh --only-kde` no Mint: exit **≠ 0** com mensagem clara.
-- [ ] `./install.sh --install-deps` imprime comandos `apt` separando `fonts-inter` como opcional e
-      **não** executa `sudo` (verificável por ausência de chamada no script e no output).
-- [ ] Reexecutar `./install.sh --all` duas vezes ⇒ exit 0 e nenhum estado quebrado.
-- [ ] `./uninstall.sh` remove tudo exceto `~/.config/deskawake/`; idempotente; tolera
-      `kpackagetool6` ausente; `--purge` remove a config.
-- [ ] `./verify.sh` com daemon parado ⇒ `on` → confirma lock; `off` → confirma ausência; sem órfãos.
-- [ ] `deskawake` funciona em sessão nova de login (autostart) — ou, se o login não for exercitado,
-      o README registra a limitação.
+- [ ] `./install.sh --only-mate` instala daemon+GTK, `.service`, autostart do daemon/widget e
+      launcher.
+- [ ] `./install.sh --all` no Mint: exit 0, aviso de KDE indisponível e mensagem de que daemon+GTK
+      foram instalados.
+- [ ] `./install.sh --only-kde` no Mint: exit ≠ 0.
+- [ ] `./install.sh --install-deps` sem `sudo` no output.
+- [ ] Reexecutar `--all` duas vezes: exit 0, sem estado quebrado.
+- [ ] `./uninstall.sh` preserva `~/.config/deskawake/`; idempotente; `--purge` remove.
+- [ ] `./verify.sh`: `on`/`off`, `GetInhibitors`, sem órfãos; sem `IsInhibited(8)`.
+- [ ] Autostart em login novo (ou limitação registrada).
 
 **Instalação — Kubuntu 26.04.1 / Plasma 6.6**
 
-- [ ] `./install.sh --all` instala daemon+GTK+Plasmoid via `kpackagetool6 -i`.
-- [ ] Reexecutar `./install.sh --all` usa `--upgrade` e **não falha** (idempotência).
+- [ ] `./install.sh --all` instala daemon+GTK+Plasmoid via `kpackagetool6 -t Plasma/Applet -i`.
+- [ ] Reexecutar usa `-u` e não falha.
 - [ ] `./install.sh --only-kde` funciona com `kpackagetool6` 2.0.
-- [ ] Plasmoid aparece em “Adicionar widgets” e instala em
-      `~/.local/share/plasma/plasmoids/org.local.deskawake/`.
-- [ ] `./verify.sh` espera ~6 s e confirma `ActiveInhibitions`/`HasInhibition(4)`; `UnInhibit` do
-      `ScreenSaver` libera.
-- [ ] `./uninstall.sh` remove o Plasmoid e o restante, preservando `~/.config/deskawake/`.
+- [ ] Plasmoid aparece em “Adicionar widgets”; “Sobre” mostra autor/site/linha legal.
+- [ ] `./verify.sh` espera ~6 s e confirma `ActiveInhibitions`/`HasInhibition(4)`.
+- [ ] `./uninstall.sh` remove o Plasmoid e o restante.
 
 **Suíte completa**
 
@@ -1121,24 +1210,58 @@ shellcheck install.sh uninstall.sh verify.sh    # quando disponível (ausente na
 python3 -m pytest tests/unit -q
 dbus-run-session -- python3 -m pytest tests/integration -q
 python3 -m pytest tests/integration -m slow -q      # opt-in
+python3 -m pytest tests/unit/test_scripts.py -v
+python3 -m pytest tests/integration/test_installer_scripts.py -v
 ```
 
-- [ ] Unitários verdes nas duas máquinas (Python 3.12.3/pytest 7.4.4 e Python 3.14.4/pytest 9.0.2).
+- [ ] Unitários verdes nas duas máquinas.
 - [ ] Integração verde em `dbus-run-session`.
 - [ ] Slow verde quando habilitado; **não** roda por padrão.
-- [ ] Nenhum teste universal de ownership de cookie; o teste é condicional ao backend.
-- [ ] Nenhum teste de GUI.
+- [ ] Scripts verdes; nenhum teste universal de ownership; nenhum teste de GUI.
 
 **Documentação**
 
-- [ ] `README.md` e `README.en.md` cobrem: instalação (`--all`, `--only-kde`, `--only-mate`,
-      `--install-deps`), uso da CLI, diagnóstico (`verify.sh`, `GetLastError`, `daemon.log`),
-      limitações (tampa/suspensão manual continuam; debounce de ~5 s no KDE; Plasmoid adicionado
-      manualmente; `kpackagetool6` ausente no Mint) e setup de testes
-      (`sudo apt install python3-pytest`; `python3 -m pytest`).
-- [ ] As duas checklists manuais da spec estão reproduzidas (MATE e Kubuntu), incluindo os itens
-      destrutivos marcados como tal.
-- [ ] Nenhuma afirmação dos READMEs contradiz a `spec.md`.
+- [ ] READMEs cobrem instalação, flags, CLI, diagnóstico, limitações, testes, checklists e créditos.
+- [ ] Nenhuma afirmação contradiz a `spec.md`; os dois idiomas são equivalentes.
+- [ ] LICENSE e metadata com a linha legal; About do GTK sem ©/CNPJ.
+
+---
+
+# E8 — Empacotamento e Distribuição (placeholder)
+
+## E8.1 Objetivo e escopo
+
+Registrar o canal de distribuição e os pontos a especificar depois da E7. **Não** há implementação
+nesta rodada.
+
+| # | Decisão | Valor |
+|---|---|---|
+| 1 | Canal | **GitHub Releases + `.deb`** (CI gera pacote, tarball e checksums) |
+| 2 | Per-user | `install.sh` continua como alternativa sem `sudo` |
+| 3 | Versão | `0.1.0` (`core.__version__`) |
+| 4 | Fora de escopo | AUR, Flatpak, AppImage, Snap |
+| 5 | Layout | `.deb` system-wide (`/usr/lib/deskawake`, `/usr/bin/deskawake`, `/usr/share/...`); config/autostart por usuário |
+| 6 | CI | GitHub Actions/`ubuntu-latest`; build com `dpkg-deb` |
+| 7 | Assinatura | Sem GPG nesta rodada; checksums SHA-256 |
+| 8 | Spec | Emendar a restrição “sem empacotamento de distro” quando a E8 for especificada |
+
+## E8.2 Pontos a especificar depois da E7
+
+- Nome do pacote e conflito com o wrapper per-user; detecção de instalação prévia.
+- `control`: maintainer (e-mail ainda não definido), dependências e `Recommends`.
+- Paths system-wide do `.service`, autostart, Plasmoid e assets; como o `@EXEC@` aponta para
+  `/usr/bin/deskawake`.
+- `postinst`/`prerm`; nada de iniciar daemon no install.
+- Workflow de tag `v*`, anexos do release e checksums.
+- Teste em container `ubuntu:24.04`/`26.04` (`dpkg -i`, `deskawake status`, remoção).
+- Update manual (sem auto-update).
+
+## E8.3 Critérios para iniciar
+
+- [ ] E7 mergeada e layout per-user congelado.
+- [ ] E6 mergeada com `core.__version__` e About.
+- [ ] E-mail do maintainer definido.
+- [ ] Workflow/CI e nomes de artefatos aprovados.
 
 ---
 
@@ -1155,35 +1278,40 @@ python3 -m pytest tests/integration -m slow -q      # opt-in
 | 5. `core/state.py` | **E2** |
 | 6. `core/daemon.py` | **E2** |
 | 7. `core/cli.py` + `bin/deskawake` | **E3** |
-| 8. `ui_gtk/widget.py` | **E4** |
-| 9. `ui_gtk/theme.py` + `assets/` | **E4** |
+| 8. `ui_gtk/widget.py` | **E4** + **E6** (A1, tooltip, retry, acessibilidade, `Sobre`) |
+| 9. `ui_gtk/theme.py` + `assets/` | **E4** + **E6** (knob/hover/cursor e `format_error_tooltip`) |
 | 10. `plasmoid/` | **E5** |
-| 11. `install.sh` | **E6** |
-| 12. `uninstall.sh` | **E6** |
-| 13. `verify.sh` | **E6** |
-| 14. `tests/` | **E1–E3** (por módulo) + **E6** (consolidação, slow, fakes finais) |
-| 15. `README.md` + `README.en.md` | **E6** |
+| 11. `install.sh` | **E7** |
+| 12. `uninstall.sh` | **E7** |
+| 13. `verify.sh` | **E7** |
+| 14. `tests/` | **E1–E3/E5** (por módulo) + **E6** (versão/tema/UI estática) + **E7** (consolidação, scripts, slow) |
+| 15. `README.md` + `README.en.md` | **E7** |
 
 ### 4.2 Decisões da spec → entrega que as materializa
 
 | Decisão | Entrega |
 |---|---|
-| 1 (escopo do ON), 11, 25 (suspensão/tampa) | **E2** (implementação), **E6** (verify/docs) |
+| 1 (escopo do ON), 11, 25 (suspensão/tampa) | **E2** (implementação), **E7** (verify/docs) |
 | 2 (daemon), 3 (ciclo de vida), 4 (Sair) | **E2** (núcleo), **E4/E5** (kill switch na UI) |
 | 5 (persistência) | **E1** (config), **E4** (posição), **E5** (posição é do Plasma) |
 | 6 (CLI) | **E3** |
 | 7 (transporte Plasmoid), 16 (UI Plasmoid), 17 (arrasto) | **E5** (Plasmoid) / **E4** (GTK) |
-| 8 (camada Z GTK) | **E4** |
-| 9, 10 (instalador/autostart) | **E6** |
+| 8 (camada Z GTK) | **E4** + **E6** (A1) |
+| 9, 10 (instalador/autostart) | **E7** |
 | 12 (sucesso/erro), 21 (`SetActive`), 29 (confirmação KDE), 30 (verificação), 31 (liveness), 32 (fim de sessão), 33 (progresso) | **E2** (núcleo), **E4/E5** (spinner) |
-| 13 (tema), 14 (menu GTK), 15 (fonte) | **E4** (GTK), **E5** (Kirigami) |
-| 18 (uninstall) | **E6** |
-| 19 (testes) | **E2/E3/E5** (por módulo) + **E6** (consolidação) |
-| 20 (meta) | **E1** (MIT/pyproject), **E6** (READMEs) |
+| 13 (tema), 14 (menu GTK), 15 (fonte) | **E4** + **E6** (`Sobre`, knob, tooltip), **E5** (Kirigami) |
+| 18 (uninstall) | **E7** |
+| 19 (testes) | **E2/E3/E5** (por módulo) + **E6** (versão/UI) + **E7** (consolidação) |
+| 20 (meta) | **E1** (MIT/pyproject), **E7** (READMEs/créditos) |
 | 22 (layout Plasmoid) | **E5** |
 | 23 (drag × `Gtk.Switch`) | **E4** |
 | 24, 26, 27, 28 (backends/cookie) | **E2** |
 | 29 (hierarquia de confirmação) | **E2** |
+| 34 (créditos) | **E6** (About) + **E7** (LICENSE/metadata/README) |
+| 35 (versão `0.1.0`) | **E6** (fonte/teste) + **E7** (docs) + **E8** (`.deb`) |
+| 36 (paridade E6) | **E6** |
+| 37 (E7 instalação) | **E7** |
+| 38 (E8 distribuição) | **E8** |
 
 ### 4.3 Gates
 
@@ -1193,8 +1321,10 @@ python3 -m pytest tests/integration -m slow -q      # opt-in
 | **G-E2** | Unit + `dbus-run-session` de integração verdes; `SIGTERM`/`Quit`/`PDEATHSIG`/`Local.Disconnected` comprovados; nenhum órfão |
 | **G-E3** | `test_cli.py` verde; `status` 0/1/3 sem auto-start; guarda Wayland e single-instance comprovadas |
 | **G-E4** | Testes puros de tema/CSS verdes; checklist manual MATE executada (itens não-destrutivos obrigatórios; destrutivos opcionais) |
-| **G-E5** | Teste estático do Plasmoid verde; `kpackagetool6 -i` instala; checklist manual Kubuntu executada (backend + visual) |
-| **G-E6** | `bash -n` limpo; `install.sh`/`uninstall.sh` idempotentes nas duas máquinas; `verify.sh` verde nos dois backends; suíte completa verde; READMEs completos |
+| **G-E5** | Teste estático do Plasmoid verde; `kpackagetool6 -t Plasma/Applet -i` instala; checklist manual Kubuntu executada (backend + visual) |
+| **G-E6** | Testes de versão/tema/UI estática verdes; baseline preservado; checklist MATE §9.2 preenchida (A1–A7 na parte de UI) |
+| **G-E7** | `bash -n` limpo; `install.sh`/`uninstall.sh` idempotentes nas duas máquinas; `verify.sh` verde nos dois backends; suíte completa verde; READMEs completos com créditos |
+| **G-E8** | Placeholder: só fecha quando o `.deb` instalar/remover em container e o release tiver checksums |
 
 ---
 
@@ -1205,11 +1335,15 @@ python3 -m pytest tests/integration -m slow -q      # opt-in
 | Empilhamento/hints do Marco (`keep_below`, `stick`, `Alt+Tab`) | Checklist manual MATE (E4) |
 | Arrasto do Plasmoid por press-and-hold e “Widgets travados” | Checklist manual Kubuntu (E5) |
 | Spinner visual e escala fracionária (125%/150%) | Checklist manual (E4/E5) |
-| Tema claro/escuro em runtime (MATE e Breeze) | Checklist manual (E4/E5) |
-| Debounce real de ~5 s do PowerDevil | `@pytest.mark.slow` (E6) + checklist Kubuntu (E5) |
-| Tampa e suspensão manual continuam suspendendo | Teste destrutivo manual no Kubuntu (E5/E6) |
-| `mate-screensaver` com idle/lock habilitados | Checklist manual MATE (E4) |
-| `kpackagetool6` ausente no Mint | `install.sh --all` (E6) + checklist Mint |
+| Tema claro/escuro em runtime (MATE e Breeze) | Checklist manual (E4/E5/E6) |
+| Debounce real de ~5 s do PowerDevil | `@pytest.mark.slow` (E7) + checklist Kubuntu (E5) |
+| Tampa e suspensão manual continuam suspendendo | Teste destrutivo manual no Kubuntu (E5/E7) |
+| `mate-screensaver` com idle/lock habilitados | Checklist manual MATE (E4/E6) |
+| `kpackagetool6` ausente no Mint | `install.sh --all` (E7) + checklist Mint |
+| A1 (“mostrar área de trabalho”) | Spike da E6 + checklist MATE; fallback documentado na E7 |
+| Contraste do knob no tema claro | Checklist MATE (E6) |
+| Créditos no “Sobre” do Plasma | Checklist Kubuntu (E7) + `test_plasmoid_assets.py` |
+| `.deb` system-wide | Container da E8 (placeholder) |
 
 > **Limite de validação declarado na spec:** o backend/UI MATE foi validado por leitura de ambiente;
 > o backend KDE foi validado por D-Bus e código-fonte do PowerDevil/kscreenlocker; a **GUI do

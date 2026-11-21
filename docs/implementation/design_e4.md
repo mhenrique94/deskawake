@@ -16,6 +16,14 @@
 > é: `spec.md` > `design_e4.md` (arquitetura/comportamento) > `visual/design_visual_aprovado.md`
 > (apenas forma visual e movimento).
 >
+> **Atualização E6/E7 (2026-11-21):** a antiga “E6 — instalador” foi dividida. **E6 = UI GTK/MATE**
+> (ajustes A1/A6, paridade visual, créditos e versão) e **E7 = instalação/verificação/READMEs**.
+> Onde este documento diz “E6” para instalador, autostart, `.service`, wrapper ou READMEs, leia
+> **E7**. A checklist §9.3 foi corrigida: A1 agora tenta correção observando `_NET_SHOWING_DESKTOP`
+> com fallback documentado; A2 preserva o filho do `systemd-inhibit` na queda de backend; A3 usa
+> `GetInhibitors`/`mate-screensaver-command` em vez de `IsInhibited(8)`. O design da E6 está em
+> [`design_e6.md`](design_e6.md).
+>
 > **Aprovação:** design aprovado pelo usuário em **2026-11-20**, incluindo as seis decisões da
 > §1.1, as ADRs 01–15 e a incorporação do pacote visual `visual/design_visual_aprovado.md`.
 
@@ -1153,8 +1161,9 @@ E6); a UI é aberta com `./bin/deskawake ui` (depois da E6, `deskawake ui`).
       alinhados dentro de 124×42.
 - [ ] Não aparece em `Alt+Tab`, barra de tarefas nem pager; aparece em **todos** os workspaces
       (criar um segundo workspace).
-- [ ] Fica atrás de janelas normais e visível com a área de trabalho à mostra; “Mostrar área de
-      trabalho” do Caja não o quebra.
+- [ ] Fica atrás de janelas normais. **“Mostrar área de trabalho” (Ctrl+Alt+D):** a E6 tenta manter o
+      widget visível observando `_NET_SHOWING_DESKTOP` e reexibindo-o uma vez; se o WM reocultar,
+      houver flicker ou o arrasto quebrar, a limitação é documentada no README (E7).
 - [ ] Arrasta de qualquer ponto, **inclusive sobre o toggle**; arrastar > 5 px **não** alterna.
 - [ ] Clique no toggle alterna; clique fora não altera.
 - [ ] Durante `Toggle`/`SetActive`: spinner de duas flechas, toggle bloqueado, sem âmbar.
@@ -1162,13 +1171,16 @@ E6); a UI é aberta com `./bin/deskawake ui` (depois da E6, `deskawake ui`).
 - [ ] Posição sobrevive a logout; desconectar monitor externo volta ao padrão.
 - [ ] Menu: `Ativar/Desativar`, `Tema ▸`, `Iniciar com o sistema`, `Sair`.
 - [ ] `Sair` com ON libera imediatamente (`systemd-inhibit --list` sem `deskawake`;
-      `GetInhibitors` vazio; `IsInhibited(8)` falso).
+      `GetInhibitors` vazio; se `mate-screensaver-command` existir, `-q` sem `deskawake`).
+      `IsInhibited(8)` **não** é usado (ausente no mate-screensaver 1.26.2).
 - [ ] `kill -9` no daemon não deixa `systemd-inhibit` órfão nem tela presa.
 - [ ] Com idle/lock do `mate-screensaver` habilitados, ON impede blanking/bloqueio; OFF restaura.
 - [ ] Com `Tema ▸ Automático`, `Mint-Y` ↔ `Mint-Y-Dark` atualiza o widget sem reiniciar.
 - [ ] Com Inter ausente, usa Ubuntu/Noto Sans sem erro de `@font-face`; o nome não elide nesses
       fallbacks.
-- [ ] `error` (ex.: matar `mate-screensaver`) mostra tooltip e libera o `systemd-inhibit`.
+- [ ] `error` (ex.: matar `mate-screensaver`) mostra tooltip com título e motivo e **preserva** o
+      filho do `systemd-inhibit` (o inibidor MATE é liberado); falha de ativação/verificação libera
+      tudo.
 - [ ] Suspensão manual funciona com ON (teste destrutivo, **opcional**).
 - [ ] Fechar a tampa suspende com ON (requer notebook; a máquina Mint é desktop; **opcional**).
 
