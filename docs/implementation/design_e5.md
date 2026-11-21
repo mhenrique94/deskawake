@@ -93,8 +93,9 @@ pacote-sonda temporário `org.local.deskawake.probe` com `kpackagetool6`, carreg
 
 **Ambiente verificado:** `plasmashell 6.6.7`; `plasma-workspace 6.6.7`; `plasma-desktop 6.6.6`;
 `libplasma7`/`libplasmaquick7` 6.6.7; `kpackagetool6 2.0`; `plasmawindowed` presente; `qmllint`
-ausente; Kirigami 6.24; Qt 6.10.2. `python3 -m pytest tests/unit` = **192 passed** nesta branch
-(E5 sobre E3); os **233** só aparecem com a E4 mergeada (`test_theme.py`/`test_ui_assets.py`;
+ausente; Kirigami 6.24; Qt 6.10.2. `python3 -m pytest tests/unit` = **192 passed** antes da
+implementação e **219** depois dos 27 testes novos nesta branch
+(E5 sobre E3); os **233**/**260** só aparecem com a E4 mergeada (`test_theme.py`/`test_ui_assets.py`;
 verificado por `git archive` da branch E4).
 
 | Achado | Evidência | Efeito neste design |
@@ -105,8 +106,10 @@ verificado por `git archive` da branch E4).
 | Slots 22/58/32 sem limites | A aritmética de 124 depende de larguras fixas; `RowLayout` pode crescer o `Text` | Adicionadas restrições min/pref/max aos três slots |
 | `kpackagetool6 -i ./plasmoid` **sem `-t`** não instala como Plasmoid | Teste real: foi para `~/.local/share/kpackage/generic/`; com `-t Plasma/Applet` foi para `~/.local/share/plasma/plasmoids/` | Todos os comandos passam a usar `-t Plasma/Applet` (inclusive `--upgrade`/`-r`); a E6 deve ser ajustada |
 | `Configurar` aparece sem `config.qml` e abre configuração sem categorias | Sonda: `visible=true`, `enabled=true`, `hasConfigurationInterface=true`; `AppletPrivate::init` liga a flag | Mantido (a spec pede o item); limitação documentada nas §4.6/§11 e na E6 |
-| `plasmawindowed` não prova 124×42 | Ele abriu 500×500 e esticou o applet; `Layout.minimumWidth` lido foi 124 | Usado só como smoke de carregamento; o tamanho fixo é provado por `BasicAppletContainer.qml` + checklist no desktop |
-| Baseline 233 não vale nesta branch | `tests/unit` = 192; 233 é E4+E5 | Gate da E5 usa 192; se a E4 for mergeada antes, 233 |
+| `plasmawindowed` não prova 124×42 | Ele abriu 500×500 e esticou o applet; `Layout.minimumWidth` lido foi 124 | Usado só como smoke de carregamento; a pílula é fixada em 124×42 dentro da célula do containment e validada na checklist |
+| Célula do containment de desktop maior que a pílula | Teste real: `ItemGeometries=Applet-134:96,1056,128,96` e `root.width/height=128/96`; o `AppletsLayout` usa `minimumItemHeight = gridUnit*3` | A pílula visível é fixada em 124×42 e centralizada no `PlasmoidItem`; as seis restrições `Layout.*` continuam na raiz para painel/compatibilidade |
+| `StateChanged` chega como objeto `String` | Com `applyState(state)` estrito, o handler registrava `on` mas `applyState` saía antes de atualizar; o valor é um objeto do motor JS | `dbusStateChanged` e `applyState` normalizam com `String(...)` antes de comparar |
+| Baseline 233 não vale nesta branch | `tests/unit` = 192; 233 é E4+E5 | Gate da E5 usa 219 (192 + 27 testes novos); se a E4 for mergeada antes, 260 |
 | `qmllint` ausente | `command -v qmllint` vazio | Smoke local via `plasmawindowed`; sem dependência nova |
 | Assets aprovados estão em `docs/` | `docs/implementation/visual/assets/*.svg` são a referência aprovada | Teste compara bytes quando presentes e valida SHA-256 dos assets do pacote como piso independente de docs |
 
@@ -115,10 +118,13 @@ verificado por `git archive` da branch E4).
 - `PlasmoidItem` com conteúdo direto e **sem** `fullRepresentation` é suportado:
   `AppletQuickItem::init()` comenta que “the only representation available are whatever items
   defined directly inside PlasmoidItem” e `appletShouldBeExpanded()` retorna `true` nesse caso.
-- As seis restrições `Layout.*` na raiz são lidas pelo containment: `BasicAppletContainer.qml` usa
-  `applet.Layout.minimumWidth/preferredWidth/maximumWidth` (e alturas) diretamente.
+- As seis restrições `Layout.*` na raiz são lidas pelo `BasicAppletContainer.qml`, mas o
+  `AppletsLayout` do desktop impõe uma célula mínima maior (observado 128×96); por isso a pílula
+  visível é fixada em 124×42 dentro da célula.
 - `DBusServiceWatcher` faz a checagem inicial síncrona em `componentComplete()`; `SignalWatcher`
   conecta em `componentComplete()` e o handler é `dbus` + nome do sinal (`dbusStateChanged`).
+- O handler do `SignalWatcher` recebe o argumento como objeto `String` do motor JS; a normalização
+  com `String(...)` é obrigatória antes das comparações estritas com `on`/`off`/`error`.
 - `SessionBus.asyncCall(message, resolve, reject)` existe; o callback recebe `DBusPendingReply` e a
   forma callback não exige `destroy()` (a forma com `finished` exige).
 - `PlasmaCore.Action` (export 2.0) é aceito em `Plasmoid.contextualActions`; `Kirigami.Icon.isMask`
@@ -258,8 +264,13 @@ margens, fecha exatamente em 124 px:
 - Hover e tooltip vêm do `PlasmaCore.ToolTipArea` que envolve a pílula (`pillToolTip`); a borda
   usa `pillToolTip.containsMouse` (não existe `Rectangle.hovered`) e o tooltip de erro usa
   `mainText`/`subText`/`textFormat` do `ToolTipArea`.
-- Nada de `width: 124` solto no `PlasmoidItem`; o containment sobrescreve. O conteúdo interno usa
-  `implicitWidth`/`implicitHeight` naturais e `elide` no nome.
+- Nada de `width: 124` solto no `PlasmoidItem`; o containment sobrescreve a raiz, por isso a pílula
+  visível tem tamanho próprio (124×42). O conteúdo interno usa `implicitWidth`/`implicitHeight`
+  naturais e `elide` no nome.
+- No desktop do Plasma 6.6.7, o `AppletsLayout` impõe uma célula mínima maior que 42 px (observado
+  128×96). A pílula visível é um `PlasmaCore.ToolTipArea` de 124×42 centralizado no `PlasmoidItem`
+  (`anchors.centerIn: parent`, `root.pillWidth`/`root.pillHeight`); as seis restrições `Layout.*`
+  continuam na raiz para painel/compatibilidade e o restante da célula fica transparente.
 - Em escala fracionária (125%/150%), o slot do nome continua com 58 px lógicos e o texto elide; o
   tamanho total não é recalculado pelo texto.
 
@@ -420,7 +431,7 @@ Contratos das funções internas (sem código de implementação nesta fase):
 | Função | Contrato |
 |---|---|
 | `syncFromDaemon()` | se não houver dono, `applyState("off")`; senão `GetState` uma vez; em `error`, pedir `GetLastError`; ignora resposta de token antigo |
-| `applyState(state)` | aceita somente `on|off|error`; atualiza trilho/rótulo/tooltip; sai de `error` limpando `lastError`; entrada em `error`/`off` para os spinners |
+| `applyState(state)` | aceita somente `on`/`off`/`error`; atualiza trilho/rótulo/tooltip; sai de `error` limpando `lastError`; entrada em `error`/`off` para os spinners |
 | `requestLastError()` | `GetLastError` somente com dono; preenche `lastError`; nunca exibe diálogo |
 | `requestActive(active)` | ignora se `callPending`; cancela verificação; `SetActive` com `"(b)"`; no reply, aplica o estado e, se `active && state == "on"`, inicia a verificação |
 | `quitDaemon()` | sem dono, retorna; senão `SetActive(false)` e, ao terminar (sucesso ou erro), `Quit()` se ainda houver dono |
@@ -453,6 +464,9 @@ Notas de contrato:
 - `StateChanged` e o registro do nome são assinados **antes** de `GetState`; o `SignalWatcher`
   conecta no `componentComplete`, e os watchers são declarados como filhos antes do
   `Component.onCompleted`.
+- O argumento de `StateChanged` chega ao QML como objeto `String` do motor JS, não como string
+  primitiva; `dbusStateChanged` normaliza com `String(state)` e `applyState` com `String(newState)`
+  antes das comparações estritas. Sem isso, `on`/`off`/`error` eram descartados.
 - Respostas atrasadas de uma geração anterior (daemon caiu, nova ação, `Quit`) são descartadas pelo
   `callToken`.
 - `busType` não aceita `Session` solto: o enum é `BusType` do módulo e, com `import ... as DBus`,
@@ -752,9 +766,9 @@ execução.
   ordem heurística e os assets (bytes contra `docs/...` quando existirem + SHA-256 como piso). Nada
   executa QML.
 - **Consequências:** a suíte roda headless no Ubuntu; a linha de base desta branch (E5 sobre E3) é
-  **192 passed** — 233 só com a E4 mergeada. A aparência real, o arrasto, o tema e o backend só
-  fecham na checklist do Plasma (§9.2); `plasmawindowed` serve como smoke de carregamento, não como
-  prova de tamanho.
+  **192 passed** antes da implementação e **219** com os 27 testes novos; 233/260 com a E4 mergeada.
+  A aparência real, o arrasto, o tema e o backend só fecham na checklist do Plasma (§9.2);
+  `plasmawindowed` serve como smoke de carregamento, não como prova de tamanho.
 
 ### ADR-11: Metadados neutros e mínimo de API 6.4
 
@@ -901,7 +915,7 @@ sequenceDiagram
 | `core/daemon.py` (E2) | **Nenhum.** Nenhum membro/sinal novo; `Quit`/`SetActive`/`GetState`/`GetLastError` usados como publicados. |
 | `core/cli.py` e `bin/deskawake` (E3) | **Nenhum.** `deskawake ui` continua recusando Wayland; o Plasmoid é independente da CLI. |
 | `ui_gtk/*` e `assets/` (E4) | **Nenhum.** Nenhuma edição no GTK nem nos assets de `assets/`; as cópias do Plasmoid são somente leitura. |
-| `tests/unit` existentes | **Nenhum.** Apenas um arquivo novo. Nesta branch (E5 sobre E3), a linha de base é **192 passed**; **233** só aparece com a E4 mergeada (`test_theme.py`/`test_ui_assets.py`). |
+| `tests/unit` existentes | **Nenhum.** Apenas um arquivo novo. Nesta branch (E5 sobre E3), a linha de base é **192 passed** e **219** com os 27 testes novos; **233**/**260** só aparecem com a E4 mergeada (`test_theme.py`/`test_ui_assets.py`). |
 | E6 (`install.sh`, `verify.sh`) | O instalador passa a empacotar também `plasmoid/contents/ui/assets/`; **precisa usar `kpackagetool6 -t Plasma/Applet -i/--upgrade`** (e `-t Plasma/Applet -r` no uninstall). Sem `-t`, o `kpackagetool6` 2.0 instala como `KPackage/Generic` em `~/.local/share/kpackage/generic/`; o `verify.sh` deve checar o diretório de plasmoids, não o genérico. |
 | READMEs (E6) | A E6 documenta que o Plasmoid é adicionado manualmente e que o arrasto/tema são validados por checklist. |
 
@@ -916,8 +930,8 @@ sequenceDiagram
       `DBusServiceWatcher`; sem `Plasma5Support`/`gdbus`/polling).
 - [x] Decisão 13/15 (tema do Plasma para superfície/texto/fonte; estado fixo; sem `@font-face`; fonte
       do tema no Plasmoid).
-- [x] Decisão 16 (124×42 fixo via `Layout.minimum/preferred/maximum`; conteúdo contido + `elide`;
-      posição do Plasma; menu `Ativar/Desativar` + `Sair` + nativos; sem `Tema ▸`/autostart).
+- [x] Decisão 16 (pílula 124×42; raiz com `Layout.minimum/preferred/maximum`; conteúdo contido +
+      `elide`; posição do Plasma; menu `Ativar/Desativar` + `Sair` + nativos; sem `Tema ▸`/autostart).
 - [x] Decisão 17 (arrasto nativo por press-and-hold; clique rápido no toggle alterna e não move;
       “Widgets travados” não é contornado).
 - [x] Decisão 22 (`metadata.json` + `contents/ui/main.qml`, Plasma ≥ 6.4, `KPackageStructure`).
@@ -929,10 +943,11 @@ sequenceDiagram
       aprovada na §1.1.
 - [x] Núcleo KDE e daemon intocados; a validação visual/de sistema continua manual. Nesta rodada,
       `kpackagetool6 -t Plasma/Applet` instalou/removeu uma sonda e `plasmawindowed` a carregou sem
-      erros de QML; `tests/unit` fechou em 192 passed.
+      erros de QML; `tests/unit` fechou em **219 passed** (192 + 27 novos).
 - [x] Achados desta rodada (`PlasmaCore.ToolTipArea` no desktop, `DBus.BusType.Session`, slots
-      fixos, `kpackagetool6 -t`, baseline 192 e `Configurar` sem categorias) estão registrados na
-      §1.3 e nas §4.6/§7/§9/§10/§11.
+      fixos, célula do containment 128×96 com pílula fixa em 124×42, `StateChanged` normalizado com
+      `String(...)`, `kpackagetool6 -t`, baseline 219 e `Configurar` sem categorias) estão registrados
+      na §1.3 e nas §4.6/§7/§9/§10/§11.
 
 ---
 
@@ -942,7 +957,7 @@ sequenceDiagram
 
 ```bash
 python3 -m pytest tests/unit/test_plasmoid_assets.py -v
-python3 -m pytest tests/unit -q          # E5 sobre E3: baseline 192 passed; com E4: 233
+python3 -m pytest tests/unit -q          # E5 sobre E3: 219 (192 + 27 novos); com E4: 260
 ```
 
 Cobertura mínima do arquivo novo:
@@ -968,6 +983,10 @@ Cobertura mínima do arquivo novo:
       `pillToolTip.containsMouse`; o tooltip usa `textFormat: Text.PlainText` e
       `active: root.state === "error"`.
 - [ ] Os slots têm min/pref/max iguais: símbolo `22`, nome `58`, toggle `32×18`.
+- [ ] A pílula visível é fixada em 124×42 e centralizada no `PlasmoidItem` (`pillWidth`/`pillHeight`);
+      as seis restrições `Layout.*` continuam na raiz.
+- [ ] `applyState` normaliza o payload de `StateChanged` com `String(newState)` antes das
+      comparações; o handler pede `GetLastError()` ao entrar em `error`.
 - [ ] Rótulos `Ativar`/`Desativar`/`Sair` presentes; `Tema` e `Iniciar com o sistema` ausentes.
 - [ ] `plasmoid/contents/ui/assets/{deskawake,spinner}.svg` são XML válido e **byte a byte**
       idênticos a `docs/implementation/visual/assets/` quando o diretório existir; em qualquer caso,
@@ -982,8 +1001,8 @@ O teste não executa QML, não abre display, não fala com o barramento real e n
 > Esta é a única validação real do Plasmoid. A máquina desta sessão é o próprio alvo
 > (Ubuntu 26.04.1 + Plasma 6.6.7 Wayland); o usuário executa a checklist. `plasmawindowed` serve
 > como smoke de carregamento, **não** como prova de 124×42: ele abriu uma janela 500×500 e esticou
-> o applet. O tamanho fixo é provado pelo `BasicAppletContainer.qml` (lê `applet.Layout.*`) e pela
-> checklist no desktop. Itens destrutivos estão marcados.
+> o applet. O `AppletsLayout` do desktop impõe uma célula mínima maior (observado 128×96); a pílula
+> desenhada é fixada em 124×42 e é isso que a checklist valida. Itens destrutivos estão marcados.
 
 **Instalação e pacote**
 
@@ -998,8 +1017,9 @@ O teste não executa QML, não abre display, não fala com o barramento real e n
 
 **Visual e layout**
 
-- [ ] Pílula 124×42, cantos arredondados, borda fina, sem gradiente/sombra; atrás das janelas e
-      visível com a área de trabalho à mostra.
+- [ ] Pílula desenhada em 124×42 (a célula invisível do containment pode ser maior), cantos
+      arredondados, borda fina, sem gradiente/sombra; atrás das janelas e visível com a área de
+      trabalho à mostra.
 - [ ] Símbolo 22×22, nome “DeskAwake” completo em 10 px semibold, toggle 32×18; nada estoura com
       escala 100%, 125% e 150%.
 - [ ] Símbolo/spinner permanecem neutros em `on`/`off`/`error`; só o trilho do toggle usa
@@ -1014,10 +1034,11 @@ O teste não executa QML, não abre display, não fala com o barramento real e n
 **Interação**
 
 - [ ] Press-and-hold na pílula move o widget (comportamento nativo); “Widgets travados” impede o
-      movimento. Anotar explicitamente o comportamento ao pressionar o toggle (a área do toggle
-      consome o clique; o arrasto é garantido no restante da pílula).
+      movimento. A célula invisível do containment pode ser maior que a pílula; o arrasto é garantido
+      no restante da pílula, e a área do toggle consome o clique esquerdo.
 - [ ] Clique rápido no toggle alterna e **não** move; clique fora do toggle não altera.
-- [ ] Toggle reflete `on/off/error` em tempo real, sem polling.
+- [ ] Toggle reflete `on/off/error` em tempo real via `StateChanged`, sem polling (payload
+      normalizado para string).
 - [ ] Menu: `Ativar/Desativar` (rótulo dinâmico), `Sair` e itens nativos do Plasma; sem `Tema ▸` e
       sem `Iniciar com o sistema`.
 - [ ] `Configurar` aparece; sem `config.qml`, abre a janela nativa sem categorias. Registrar a
@@ -1053,7 +1074,7 @@ O teste não executa QML, não abre display, não fala com o barramento real e n
 | Condição | Evidência |
 |---|---|
 | `python3 -m pytest tests/unit/test_plasmoid_assets.py -v` verde | saída colada no PR |
-| `python3 -m pytest tests/unit -q` sem regressão (baseline 192 passed nesta branch; 233 com E4) | saída colada no PR |
+| `python3 -m pytest tests/unit -q` sem regressão (219 nesta branch: 192 + 27 novos; 260 com E4) | saída colada no PR |
 | `kpackagetool6 -t Plasma/Applet -i ./plasmoid` instala; sem `-t` não conta | saída colada no PR (manual do usuário) |
 | `plasmawindowed org.local.deskawake` carrega sem erro de QML (smoke, não gate visual) | stderr colado no PR |
 | Checklist manual do Plasma nesta máquina (§9.2) executada, com itens não-destrutivos marcados | checklist colada no PR |
@@ -1085,18 +1106,20 @@ com o resultado do usuário; o teste estático é condição necessária, não s
 | API do módulo `org.kde.plasma.workspace.dbus` divergir do esperado | Contratos conferidos no `qmltypes` e no código do Plasma 6.6.7 (`asyncCall`, `SignalWatcher`, `DBusServiceWatcher`, `DBus.bool`); smoke com `plasmawindowed` e checklist manual |
 | `Kirigami.Icon` com `isMask` não recolorir o SVG local | O SVG é monocromático e usa `currentColor`; `isMask` substitui todos os pixels não transparentes. Se falhar, corrigir com variante de asset aprovada, sem redesenho |
 | Arrasto sobre o toggle não funcionar | O `MouseArea` do toggle consome o clique esquerdo; o arrasto é garantido no restante da pílula. A checklist registra o comportamento; não contornar com `MouseArea` global |
-| Texto “DeskAwake” elidir em fonte/DPI incomuns | 10 px semibold + slot de 58 px + `elide`; validar em 100%/125%/150% e nas fontes Ubuntu/Noto |
+| Texto “DeskAwake” elidir em fonte/DPI incomuns | 10 px semibold + `letterSpacing: -0.05` + slot de 58 px + `elide`; no Noto Sans o semibold resolve para Bold e mede 58,1 px. Validar em 100%/125%/150% e nas fontes Ubuntu/Noto |
 | Spinner de verificação fora de sincronia com o daemon | `verifyWindowMs = 6000` acompanha `VERIFY_DELAY` da E2; o estado público só muda por `StateChanged`/reply |
 | `Plasmoid.contextualActions` com binding dinâmico não atualizar | `PlasmaCore.Action.text/enabled` têm notificação; validar no menu real; se necessário, reatribuir `Plasmoid.contextualActions` ao mudar de estado |
 | `backgroundHints: NoBackground` remover o fundo esperado | A pílula desenha a própria superfície; a checklist valida atrás das janelas e com a área à mostra |
 | `Configurar` sem `config.qml` abre página sem categorias | Sonda confirmou `visible=true`/`hasConfigurationInterface=true`; a E5 mantém o item (spec) e documenta a limitação na E6; alternativa seria remover a ação, contrariando a spec |
 | `kpackagetool6 -i` sem `-t Plasma/Applet` instalar como genérico | Testado: sem `-t` vai para `~/.local/share/kpackage/generic/`; todos os comandos/E6 usam `-t Plasma/Applet` e o `verify.sh` checa `~/.local/share/plasma/plasmoids/` |
-| Baseline 233 vs 192 | 233 é E4+E5; nesta branch (E5 sobre E3) são 192. O gate aceita 192 e, se a E4 for mergeada antes, 233 |
+| Baseline 233 vs 192 | 233 é E4+E5; nesta branch (E5 sobre E3) são **219** (192 + 27 novos) e **260** com a E4. O gate aceita 219 e, se a E4 for mergeada antes, 260 |
 | `Plasmoid.toolTipMainText`/`SubText` não existem | Corrigido para as propriedades bare do `PlasmoidItem`; o teste estático rejeita o prefixo `Plasmoid.` |
 | `busType: Session` não resolve | Corrigido para `DBus.BusType.Session`; o teste estático exige a forma qualificada |
 | `Rectangle.hovered` não existe; `PlasmoidItem.toolTip*` não aparece no desktop | Corrigido com `PlasmaCore.ToolTipArea` e `pillToolTip.containsMouse`; o teste estático exige o `ToolTipArea` |
 | Sem `qmllint` nas máquinas | Teste estático é o piso; `plasmawindowed` é o smoke de carregamento e a validação real é a checklist nesta máquina. `qmllint` pode ser usado como diagnóstico se existir, sem virar dependência |
-| `plasmawindowed` não prova o tamanho fixo nem o arrasto | Ele estica o applet na janela (500×500 na sonda); a prova de 124×42 é o `BasicAppletContainer.qml` + checklist no desktop. O smoke só detecta erros de carregamento |
+| `plasmawindowed` não prova o tamanho fixo nem o arrasto | Ele estica o applet na janela (500×500 na sonda) e o `AppletsLayout` do desktop impõe uma célula mínima maior (128×96). A pílula é fixada em 124×42 dentro da célula; a checklist valida o visual e o arrasto. O smoke só detecta erros de carregamento |
+| `StateChanged` como objeto `String` no QML | Normalizado com `String(state)`/`String(newState)` no handler e em `applyState`; testes estáticos exigem a normalização |
+| Célula do containment maior que a pílula | Pílula visível fixada em 124×42 e centralizada; as seis restrições da raiz permanecem para o contrato; a checklist valida a pílula, não a célula |
 | Assets de referência em `docs/` | Comparação byte a byte quando os docs existirem + SHA-256 dos SVGs do pacote como piso; a E5 não depende de docs em CI |
 | `Component.onCompleted` antes do `registered` inicial | `DBusServiceWatcher` faz a checagem síncrona em `componentComplete`; ainda assim, `registeredChanged` também sincroniza (sem duplicar se o estado já for o mesmo) |
 | Reply do `asyncCall` com ownership incorreto | Usar a forma callback (JS ownership) e não chamar `destroy()`; a forma de retorno único, se usada, exigiria `destroy()` |
@@ -1116,17 +1139,20 @@ com o resultado do usuário; o teste estático é condição necessária, não s
 | `Sair` | `SetActive(false)` → `Quit()` | Não remove o widget; daemon morto → apenas fecha o menu | E5.3/E5.4; remover o widget não pode ser kill switch implícito |
 | Config UI | “Configurar” entre itens nativos | Sem `config.qml`; o item aparece, mas abre a configuração sem categorias | Fora do escopo da E5; limitação de UX documentada na E6 (a spec pede o item; removê-lo contrariaria a spec) |
 | `kpackagetool6` | `kpackagetool6 -i ./plasmoid` | `kpackagetool6 -t Plasma/Applet -i/--upgrade` (e `-t Plasma/Applet -r`) | Testado: sem `-t`, o 2.0 instala como `KPackage/Generic` em `~/.local/share/kpackage/generic/` e o Plasmoid não aparece |
-| Baseline de testes | 233 passed | 192 passed nesta branch (E5 sobre E3); 233 com E4 | A E5 empilha sobre a E3; os testes da E4 só entram quando ela é mergeada |
+| Baseline de testes | 233 passed | 219 nesta branch (192 + 27 novos); 260 com E4 | A E5 empilha sobre a E3; os testes da E4 só entram quando ela é mergeada |
 | Ambiente de validação | “Mint/MATE; checklist no Kubuntu” | Ubuntu 26.04.1 + Plasma 6.6.7/Wayland nesta sessão; smoke `plasmawindowed` + checklist nesta máquina | O ambiente mudou; `plasmawindowed` não prova 124×42 nem arrasto |
 | Metadados | Campos exigidos, valores não fixados | `preferences-system-power-management` / `System Information` / MIT / 0.1.0 | Escolha neutra; ícone existe no Breeze; instalação testada com `-t Plasma/Applet` |
 | `compactRepresentation` | Não mencionado | Ausente; raiz é full representation | Widget de desktop; validado no fonte do Plasma 6.6.7 (`AppletQuickItem` + `BasicAppletContainer`) |
 | Tooltip | Motivo em `error` | `PlasmaCore.ToolTipArea` na pílula; `PlasmoidItem.toolTip*` só para painel | O containment de desktop não consome `PlasmoidItem.toolTip*`; o `ToolTipArea` mantém o estilo nativo |
 | `busType`/hover | Não detalhados | `DBus.BusType.Session` e `pillToolTip.containsMouse` | Correções de API do Plasma 6.6, sem mudança de produto |
+| Tamanho do Plasmoid | 124×42 via `Layout.*` no `PlasmoidItem` | Pílula visível fixa em 124×42 centralizada; raiz mantém as seis restrições | O `AppletsLayout` do desktop impõe célula mínima de 128×96; a forma aprovada é preservada na pílula |
+| Payload de `StateChanged` | `on`/`off`/`error` como string | `String(state)`/`String(newState)` antes de comparar | O motor JS entrega o argumento como objeto `String`; sem normalização o estado não atualiza |
+| Nome no Plasmoid | 10 px semibold, slot 58 | + `letterSpacing: -0.05` | No Noto Sans o semibold resolve para Bold e mede 58,1 px; o tracking mínimo mantém o nome completo |
 
-Nenhum desvio altera decisões de produto, backend, contrato D-Bus, tamanho, cores ou fluxo. As
-quatro decisões que poderiam ser lidas como novas estão explicitamente aprovadas na §1.1. As
-correções de `kpackagetool6 -t`, tooltip via `PlasmaCore.ToolTipArea`, `busType` e
-`containsMouse` são de execução/API; a única limitação de UX é `Configurar` sem categorias.
+Nenhum desvio altera decisões de produto, backend, contrato D-Bus, tamanho visível, cores ou fluxo. As
+quatro decisões que poderiam ser lidas como novas estão explicitamente aprovadas na §1.1. A fixação
+da pílula em 124×42 dentro da célula, a normalização do payload de `StateChanged` e o tracking mínimo
+do nome são correções de execução/API; a única limitação de UX é `Configurar` sem categorias.
 
 ---
 
@@ -1136,10 +1162,10 @@ correções de `kpackagetool6 -t`, tooltip via `PlasmaCore.ToolTipArea`, `busTyp
 2. Rodar `/spec:tasks docs/implementation/design_e5.md` (ou `/implement`) para gerar o plano
    atômico da E5.
 3. A branch **`feat/e5-plasmoid-kde` já existe e contém a E3** (E5 empilha sobre E3, não sobre E4);
-   não é preciso recriá-la. Se a E4 for mergeada antes, a linha de base passa de 192 para 233.
+   não é preciso recriá-la. Se a E4 for mergeada antes, a linha de base passa de 219 para 260.
 4. Implementar `metadata.json`, `main.qml`, as cópias dos assets e
    `tests/unit/test_plasmoid_assets.py`; rodar o gate estático no Ubuntu 26.04.1
-   (`pytest tests/unit` = 192 + os testes novos).
+   (`pytest tests/unit` = 219, sendo 192 + 27 novos).
 5. O usuário executa a checklist do Plasma nesta máquina (§9.2), incluindo o smoke
    `plasmawindowed`, e cola o resultado no PR; só então o G-E5 fecha.
 6. A E6 instala o pacote com `kpackagetool6 -t Plasma/Applet -i/--upgrade` (e remove com

@@ -104,7 +104,7 @@ Nenhuma task cai em backlog (< 2): a E5 é uma entrega única e o gate só fecha
   - Critério: falha (RED) — `FileNotFoundError` para `plasmoid/contents/ui/main.qml`.
   - Estimativa: 20min
 
-- [ ] **T-07**: Escrever os testes RED de tema, estado, D-Bus, tooltip, spinner e menu
+- [ ] **T-07**: Escrever os testes RED de tema, estado, D-Bus, tooltip, spinner, menu e pílula/célula
   - Arquivo: `tests/unit/test_plasmoid_assets.py` (append)
   - Testes:
     - `test_main_qml_uses_theme_surface` — `Kirigami.Theme.backgroundColor`, `Kirigami.Theme.textColor`, `0.88`, `0.18`, `0.28`, `pillToolTip.containsMouse`, `radius: 12`, `border.width: 1`; ausência de `#20252B`/`#F0F3F5`.
@@ -120,7 +120,10 @@ Nenhuma task cai em backlog (< 2): a E5 é uma entrega única e o gate só fecha
     - `test_main_qml_quit_contract` — `function quitDaemon`, guarda por `daemonWatcher.registered`, `stopVerification()` antes de `member: "Quit"`, `SetActive(false)` antes de `Quit`.
     - `test_main_qml_state_model_contract` — `property string state: "off"`, `property string lastError`, `property bool callPending`, `property bool verifying`, `property int callToken`; declarações de `syncFromDaemon`, `applyState`, `requestLastError`, `requestActive`, `quitDaemon`, `startVerification`, `stopVerification`, `invalidateCalls`; `Component.onCompleted`.
     - `test_main_qml_watchers_precede_getstate` — `SignalWatcher` e `DBusServiceWatcher` aparecem antes de `GetState`; `Component.onCompleted` aparece depois das funções. Docstring marca o teste como heurístico.
-  - Comando: `python3 -m pytest tests/unit/test_plasmoid_assets.py -v -k "theme or state or toggle or spinner or tooltip or menu or dbus or verification or quit or watchers"`
+    - `test_main_qml_keeps_pill_compact_inside_containment_cell` — pílula visível 124×42 centrada na célula do containment (`anchors.centerIn`, `root.pillWidth`/`pillHeight`, propriedades readonly 124/42).
+    - `test_main_qml_normalizes_signal_payload` — `applyState` normaliza `String(newState)` antes de comparar.
+    - `test_main_qml_error_state_refreshes_last_error` — handler normaliza `String(state)` e pede `requestLastError()` em `error`.
+  - Comando: `python3 -m pytest tests/unit/test_plasmoid_assets.py -v -k "theme or state or toggle or spinner or tooltip or menu or dbus or verification or quit or watchers or pill or normalizes"`
   - Critério: falha (RED) — `FileNotFoundError` para `main.qml`.
   - Estimativa: 25min
 
@@ -142,7 +145,7 @@ Nenhuma task cai em backlog (< 2): a E5 é uma entrega única e o gate só fecha
 
 - [ ] **T-10**: Montar `PlasmaCore.ToolTipArea`, a pílula e os três slots fixos
   - Arquivo: `plasmoid/contents/ui/main.qml` (seção 7, parte 1)
-  - Contrato: `design_e5.md` §2.3–§2.5 — `PlasmaCore.ToolTipArea { id: pillToolTip; anchors.fill: parent; mainText: "DeskAwake"; subText: root.state === "error" ? root.lastError : ""; textFormat: Text.PlainText; active: root.state === "error"; location: Plasmoid.location }`; dentro, `Rectangle { id: pill; anchors.fill: parent; radius: 12; border.width: 1; color: Qt.rgba(Kirigami.Theme.backgroundColor.r, ..., 0.88); border.color: Qt.rgba(Kirigami.Theme.textColor.r, ..., pillToolTip.containsMouse ? 0.28 : 0.18) }`; `RowLayout { anchors.fill: parent; anchors.leftMargin: 1; anchors.rightMargin: 1; spacing: 4 }`; slot do símbolo `Item` 22×22 com as seis `Layout.*` = 22; `Text` do nome com min/pref/maxWidth 58 e `text: "DeskAwake"`; slot do toggle `Item` 32×18 com as seis `Layout.*` (32/18). Conteúdo dos slots vem nas tasks seguintes.
+  - Contrato: `design_e5.md` §2.3–§2.5 — `PlasmaCore.ToolTipArea { id: pillToolTip; anchors.centerIn: parent; width: root.pillWidth; height: root.pillHeight; mainText: "DeskAwake"; subText: root.state === "error" ? root.lastError : ""; textFormat: Text.PlainText; active: root.state === "error"; location: Plasmoid.location }`; dentro, `Rectangle { id: pill; anchors.fill: parent; radius: 12; border.width: 1; color: Qt.rgba(Kirigami.Theme.backgroundColor.r, ..., 0.88); border.color: Qt.rgba(Kirigami.Theme.textColor.r, ..., pillToolTip.containsMouse ? 0.28 : 0.18) }`; `RowLayout { anchors.fill: parent; anchors.leftMargin: 1; anchors.rightMargin: 1; spacing: 4 }`; slot do símbolo `Item` 22×22 com as seis `Layout.*` = 22; `Text` do nome com min/pref/maxWidth 58 e `text: "DeskAwake"`; slot do toggle `Item` 32×18 com as seis `Layout.*` (32/18). A pílula visível é fixada em 124×42 centrada no `PlasmoidItem` (`pillWidth`/`pillHeight`), porque o `AppletsLayout` do desktop reserva uma célula maior (128×96); a raiz mantém as seis `Layout.*`. Conteúdo dos slots vem nas tasks seguintes.
   - Comando: `python3 -m pytest tests/unit/test_plasmoid_assets.py -v -k "theme_surface or tooltip_contract or inner_slots"`
   - Critério: os três testes ficam verdes (GREEN); geometria externa continua 124×42; nenhuma cor de superfície fixa.
   - Estimativa: 20min
@@ -203,7 +206,7 @@ Nenhuma task cai em backlog (< 2): a E5 é uma entrega única e o gate só fecha
 
 - [ ] **T-18**: Implementar handlers de watcher e `Component.onCompleted`
   - Arquivo: `plasmoid/contents/ui/main.qml` (seções 9–10)
-  - Contrato: `design_e5.md` §4.9 e §6.6 — `dbusStateChanged(state)` chama `applyState(state)`; `onRegisteredChanged` chama `syncFromDaemon()` se `registered`, senão `invalidateCalls()` + `applyState("off")` + `lastError = ""`; `Component.onCompleted` (último bloco do arquivo) chama `syncFromDaemon()` se `registered`, senão `applyState("off")`. Nenhuma chamada D-Bus em `Component.onDestruction`; nenhum `GetState` sem dono.
+  - Contrato: `design_e5.md` §4.9 e §6.6 — `dbusStateChanged(state)` normaliza `String(state)`, chama `applyState(value)` e, se `value === "error"`, `requestLastError()`; `onRegisteredChanged` chama `syncFromDaemon()` se `registered`, senão `invalidateCalls()` + `applyState("off")` + `lastError = ""`; `Component.onCompleted` (último bloco do arquivo) chama `syncFromDaemon()` se `registered`, senão `applyState("off")`. Nenhuma chamada D-Bus em `Component.onDestruction`; nenhum `GetState` sem dono.
   - Comando: `python3 -m pytest tests/unit/test_plasmoid_assets.py -v -k "state_model or watchers_precede"`
   - Critério: os dois testes ficam verdes (GREEN); `Component.onCompleted` é o último bloco; ordem heurística dos watchers antes de `GetState` confirmada.
   - Estimativa: 20min
@@ -333,7 +336,7 @@ Os critérios vêm do `DELIVERY_MAP.md` §E5.4, da §9.1/§9.2 do `design_e5.md`
 | AC-07 — Cores de estado exatas `#80D9A4`/`#929DA5`/`#E47F7F` e toggle como único indicador | T-07, T-12 |
 | AC-08 — `SetActive` com `"(b)"`/`DBus.bool`, `GetState`, `GetLastError`, `verifyWindowMs = 6000`; sem `Toggle`/auto-start | T-07, T-15 |
 | AC-09 — `Sair` com guarda por dono, `stopVerification`, `SetActive(false)` → `Quit()` | T-07, T-17 |
-| AC-10 — Spinner `960 ms`/linear/infinito, visível e animando só em `callPending || verifying` | T-07, T-13 |
+| AC-10 — Spinner `960 ms`/linear/infinito, visível e animando só em `callPending` ou `verifying` | T-07, T-13 |
 | AC-11 — Tooltip via `PlasmaCore.ToolTipArea`, hover por `containsMouse`, `Text.PlainText`, motivo em `error` | T-07, T-10 |
 | AC-12 — Menu `contextualActions` com rótulo dinâmico, ações bloqueadas em voo e `Sair`; sem itens exclusivos do GTK | T-07, T-14 |
 | AC-13 — Watchers antes de `GetState`, estado em memória e `Component.onCompleted` por último | T-07, T-18 |
@@ -380,3 +383,17 @@ Os critérios vêm do `DELIVERY_MAP.md` §E5.4, da §9.1/§9.2 do `design_e5.md`
 7. **Fora de escopo intocável:** nenhuma alteração em `core/config.py`, `core/environment.py`, `core/inhibitors.py`, `core/state.py`, `core/daemon.py`, `core/cli.py`, `bin/deskawake`, `ui_gtk/`, `assets/`, `tests/conftest.py` ou no contrato D-Bus da E2.
 8. **PR empilhado:** E5 → E3 (base `feat/e3-cli-launcher`), em paralelo à E4. Não retargetar para `main` sem confirmação; a E6 só abre depois de E4 e E5 mergeadas.
 9. **Documento transitório:** este `tasks_e5.md` (em `docs/implementation/`) é o escopo canônico do `/implement`; não entra no PR de código nem é citado em código.
+
+## Execução real (2026-11-20)
+
+Status: T-01–T-22 e T-26 executadas; T-23–T-25 (checklist manual) pendentes; T-27 com commits feitos e push/PR pendentes. `tests/unit` = **219 passed** (192 + **27** novos); `tests/integration` mantém 14 falhas pré-existentes de liberação de `UnInhibit`, fora do escopo da E5. Commits: `5f90c78` (entrega), `594e4b9` (docs), `61b18ff` (fix da pílula/estado).
+
+Achados da validação no Plasma real (corrigidos antes do commit final):
+
+| Achado | Evidência | Correção |
+|---|---|---|
+| Célula do containment maior que a pílula | `ItemGeometries=Applet-134:96,1056,128,96`; `root.width/height=128/96`; o `AppletsLayout` usa `minimumItemHeight = gridUnit*3` | Pílula visível fixada em 124×42, centralizada no `PlasmoidItem` (`pillWidth`/`pillHeight`); as seis `Layout.*` permanecem na raiz. Teste: `test_main_qml_keeps_pill_compact_inside_containment_cell`. |
+| `StateChanged` chega como objeto `String` | O handler registrava `on`, mas `applyState` saía na validação estrita e o trilho ficava cinza | `dbusStateChanged` e `applyState` normalizam com `String(...)`; `error` chama `requestLastError()`. Testes: `test_main_qml_normalizes_signal_payload` e `test_main_qml_error_state_refreshes_last_error`. |
+| Nome elidindo no slot de 58 px | Noto Sans DemiBold resolve para Bold e mede 58,1 px em 10 px | `font.letterSpacing: -0.05`; validar 100%/125%/150% na T-23. |
+
+Validação manual já feita nesta sessão: widget instalado, adicionado ao desktop, pílula 124×42 confirmada por screenshot, `on` → trilho menta e `off` → cinza via `StateChanged`; a checklist T-23–T-25 continua sendo a validação oficial do usuário.
