@@ -1,6 +1,6 @@
 # Design: E6 — Instalador, Desinstalador, Verificação, Testes e Documentação
 
-**Feature:** DeskAwake — E6 | **Data:** 2026-11-21 | **Status:** WIP — design em aberto; pendência de implementação/validação MATE registrada na §1.4
+**Feature:** DeskAwake — E6 | **Data:** 2026-11-21 | **Status:** WIP — design em aberto; validação visual/funcional MATE executada em 21/11/2026 e ajustes pendentes registrados na §1.4
 **Referência:** [`spec.md`](spec.md) (decisões 1–33, “Tarefas de implementação” 11–15, “Contratos”,
 “Arquivos instalados” e checklists manuais), [`DELIVERY_MAP.md`](DELIVERY_MAP.md) §E6,
 [`design_e1.md`](design_e1.md) (`config.json`), [`design_e2.md`](design_e2.md) (contrato D-Bus,
@@ -15,10 +15,11 @@ liveness, log), [`design_e3.md`](design_e3.md) (CLI e launcher), [`design_e4.md`
 > A branch `feat/e6-instalador-verificacao-docs` nasce da `main` que já contém o widget GTK, os
 > assets e o Plasmoid; os testes de sandbox precisam de `ui_gtk/` e `assets/` (E4).
 >
-> **Pendência aberta:** os merges colocam o **código** no `main`, mas **não** fecham a
-> implementação/validação no ambiente **MATE**. O usuário fará os ajustes necessários e validará o
-> MATE na máquina Mint; até lá este design permanece **WIP** e a E6 não pode declarar o MATE
-> pronto (§1.4).
+> **Pendência aberta:** a validação visual/funcional da UI GTK (E4) no **MATE** foi executada em
+> **21/11/2026** na máquina Mint 22.3 MATE/X11 (resultados na §1.4). Ela confirmou a maior parte do
+> contrato, mas deixou **ajustes de documentação/verificação e uma decisão de produto em aberto**
+> (mostrar área de trabalho). Até esses ajustes serem incorporados, este design permanece **WIP** e
+> a E6 não pode declarar o MATE pronto.
 >
 > **Restrição de máquina:** a máquina desta sessão é **Ubuntu 26.04.1 + Plasma 6.6.7 (Wayland)**.
 > Bash 5.3.9, `kpackagetool6` 2.0, `gdbus`, `systemd-inhibit` e `desktop-file-validate` presentes;
@@ -97,6 +98,9 @@ ambiente; ficam registradas para revisão, mas não são decisões de produto no
 | `verify.sh` e `HasInhibition` | `HasInhibition(4)` é exigido `true` **durante** o ON; depois do OFF só se exige que a entrada `deskawake` suma de `ActiveInhibitions` | `HasInhibition` é global; outro app pode inibir idle e não é falha do DeskAwake |
 | Teste de ausência do `kpackagetool6` | `KPKG_TOOL=${KPKG_TOOL:-kpackagetool6}` e `command -v "$KPKG_TOOL"`; os testes usam `KPKG_TOOL` inexistente | O mapa exige decisão por `command -v`; o override é só uma costura de teste, não uma flag de usuário |
 | Gate de scripts | `bash -n` sempre; `shellcheck` quando existir (ausente nas máquinas validadas) | Mapa E6.3 item 12 |
+| `verify.sh` no MATE | `GetInhibitors` + `mate-screensaver-command -q`; **não** exigir `IsInhibited(8)` (ausente no mate-screensaver 1.26.2) | Validação MATE de 21/11/2026; `IsInhibited` só existe no fake de testes |
+| Tema `auto` no MATE | Resolver pelo nome de `gtk-theme`; `gtk-application-prefer-dark-theme` não existe em `org.mate.interface` no Mint 22.3 | Validação MATE de 21/11/2026 |
+| `error` por queda de backend | Preserva o filho do `systemd-inhibit`; só falha de ativação/verificação libera tudo | `DELIVERY_MAP` item 9; a checklist da E4/spec precisa ser alinhada |
 
 ### 1.3 Estado atual e hidratação
 
@@ -108,6 +112,9 @@ ambiente; ficam registradas para revisão, mas não são decisões de produto no
   **267 passed**; `dbus-run-session -- python3 -m pytest tests/integration -q` ⇒ **34 passed,
   1 skipped** (o skip é o teste `@pytest.mark.slow`, desmarcado por `conftest.py`). Esse é o
   baseline que a E6 deve preservar; os testes novos da E6 somam a partir dele.
+- **Pré-validação MATE (2026-11-21):** a UI GTK foi exercitada na máquina Mint 22.3 MATE/X11
+  (gate 267 unitários; janela/hints, arrasto, spinner, estados, tema, compositor, menu, autostart,
+  `Sair` e `kill -9`). Resultados e pendências na §1.4.
 - **Lacunas reais:** não existem `install.sh`, `uninstall.sh`, `verify.sh`, `data/`, README.en.md nem
   testes de scripts. O `README.md` atual é bilíngue em um único arquivo e ainda diz “implementação em
   andamento”; deve ser dividido e atualizado.
@@ -125,28 +132,52 @@ ambiente; ficam registradas para revisão, mas não são decisões de produto no
 - **`plasmoid/` (E5) já fixa:** `kpackagetool6 -t Plasma/Applet` é obrigatório; sem `-t` o pacote vai
   para `~/.local/share/kpackage/generic/`. A E6 deve usar `-t Plasma/Applet` em `-i`, `-u` e `-r`.
 
-### 1.4 Pendência aberta — implementação e validação no MATE
+### 1.4 Validação MATE executada — ajustes pendentes para a E6
 
-Os merges dos PRs #4, #5, #7, #8 e #10 colocam **código** de E1–E5 no `main`, mas **não fecham** a
-implementação/validação no ambiente **MATE**. Esta é uma pendência explícita da E6 e deve
-permanecer aberta até a validação real na máquina Mint 22.3 MATE/X11.
+A validação visual/funcional da UI GTK (E4) foi executada em **21/11/2026** na máquina
+**Mint 22.3 MATE/X11** (GTK 3.24.41, Marco composto, tema `Squared`, um monitor ativo). O E5 é o
+Plasmoid do Plasma e não se aplica ao MATE.
 
-- [ ] **Ajustes de implementação MATE:** revisar o widget GTK e o backend MATE com base nos achados
-      da máquina real; corrigir o que for necessário (hints do Marco, arrasto, tema, autostart,
-      comportamento de lock/idle). Nenhum ajuste deve contrariar a `spec.md`.
-- [ ] **Validação em ambiente MATE:** executar a checklist da §9.2 na máquina Mint, incluindo
-      instalação, widget, autostart, `verify.sh`, `uninstall.sh`, tema e `GetInhibitors`/
-      `IsInhibited(8)`.
-- [ ] **Critério de saída:** o MATE só pode ser declarado pronto quando a checklist da §9.2 estiver
-      preenchida e os ajustes acima estiverem no PR/`main`. Os testes headless (267 unit + 34
-      integração) **não** substituem essa validação; o merge da E4 **não** é prova de MATE validado.
+**Passou (não-destrutivo):** gate de **267 unitários**; janela `124×42` em `1772,24` sem decoração,
+`UTILITY`, `SKIP_TASKBAR`/`SKIP_PAGER`/`BELOW`/`STICKY` e desktop `0xFFFFFFFF`; fora do `Alt+Tab` e
+da barra; sticky no workspace 2; arrasto pelo toggle sem alternar; posição persistida; spinner no
+slot 22×22 com toggle preservado/insensível; ON/OFF com `GetInhibitors` + `systemd-inhibit`; `error`
+com tooltip real e recuperação; `Sair` e `kill -9` sem órfãos; menu/autostart; tema
+`auto`/forçado; compositor sólido/translúcido; fallback de fonte.
+
+**Achados que a E6 precisa incorporar/decidir:**
+
+| # | Achado (validação 21/11/2026) | Ajuste na E6 |
+|---|---|---|
+| A1 | `Ctrl+Alt+D` (“mostrar área de trabalho”) adiciona `_NET_WM_STATE_HIDDEN`; o widget some enquanto o desktop está à mostra e volta ao restaurar. | Decidir entre documentar como limitação no README ou corrigir os hints no widget. A correção de `ui_gtk/` está **fora do escopo declarado da E6** (§1) e exigiria uma exceção/PR de E4. |
+| A2 | `error` por queda de backend **preserva** o filho do `systemd-inhibit` (o inibidor MATE é liberado). | Alinhar spec/checklist/README ao `DELIVERY_MAP` item 9: queda de backend preserva o filho; falha de ativação/verificação libera tudo. A checklist atual diz “error libera o `systemd-inhibit`” de forma genérica. |
+| A3 | `IsInhibited(8)` **não existe** no mate-screensaver 1.26.2 real. | `verify.sh` e checklists usam `org.mate.ScreenSaver.GetInhibitors` e, se existir, `mate-screensaver-command -q`; `IsInhibited` fica só no fake de testes. |
+| A4 | `gtk-application-prefer-dark-theme` **não existe** em `org.mate.interface` no Mint 22.3. | Documentar que o `auto` resolve pelo nome do tema (`*Dark*`); não é bug. |
+| A5 | O `idle-delay` de `org.mate.session` é lido no login; o teste de 1 min não vale a quente. | Testar em sessão nova ou registrar a confirmação do usuário de que OFF restaura o screensaver; `lock-enabled` é destrutivo/opcional. |
+| A6 | Sob XTest, o submenu `Tema` às vezes fecha ao saltar o ponteiro; a seleção por teclado funcionou. | Repetir com mouse real antes de tratar como bug de produto. |
+| A7 | Logout, desconexão de monitor externo e bloqueio de tela não foram exercitados. | Manter como pendências manuais no PR/README até serem executados. |
+
+- [ ] **A1 — “Mostrar área de trabalho”:** decisão de produto acima; se for limitação, o README deve
+      dizer que o widget volta ao restaurar, não que fica visível com o desktop à mostra.
+- [ ] **A2 — `error` × `systemd-inhibit`:** alinhar spec/checklist/README ao `DELIVERY_MAP` item 9;
+      não deixar as duas fontes se contradizerem.
+- [ ] **A3 — `IsInhibited(8)`:** remover a exigência no `verify.sh`/teste estático e nas checklists;
+      usar `GetInhibitors` (+ `mate-screensaver-command -q` quando disponível).
+- [ ] **A4 — `auto` no MATE:** documentar a ausência do `prefer-dark` no README/spec.
+- [ ] **A5 — idle/lock:** documentar o requisito de sessão nova para o delay curto e o lock opcional.
+- [ ] **A6 — submenu `Tema`:** repetir com mouse real; se reproduzir, abrir achado de UI (E4).
+- [ ] **A7 — pendências não executadas:** logout, monitor externo e lock no PR/README.
+- [ ] **Critério de saída:** o MATE só pode ser declarado pronto quando A1–A7 estiverem
+      resolvidos/documentados e a checklist da §9.2 estiver preenchida. Os testes headless (267
+      unit + 34 integração) **não** substituem a validação manual; o merge da E4 **não** é prova de
+      MATE validado.
 - [ ] **Efeito no gate G-E6:** a linha “READMEs completos” e o aceite de instalação no Mint só fecham
-      após esta pendência. O README e o PR da E6 não podem afirmar “MATE validado” enquanto o item
-      estiver aberto.
+      após esta pendência. O README e o PR da E6 não podem afirmar “MATE validado” enquanto a seção
+      estiver aberta.
 
 **Consequência:** o design permanece **WIP**. A branch/PR da E6 pode receber o design agora e, na
-sequência, os ajustes MATE, os scripts, os testes e os READMEs; a pendência acima é critério de
-saída, não um detalhe opcional.
+sequência, os ajustes de documentação/verificação (A2–A5), a decisão A1, os scripts, os testes e os
+READMEs; a pendência acima é critério de saída, não um detalhe opcional.
 
 ---
 
@@ -475,7 +506,8 @@ exec "/home/<usuario>/.local/share/deskawake/bin/deskawake" "$@"
 **Pré-condições:** instalação presente (`$HOME/.local/bin/deskawake` ou `$SHARE/bin/deskawake`) e
 `.service` instalado. Sem instalação ⇒ mensagem `DeskAwake não instalado; rode ./install.sh` e exit 1.
 Sem `gdbus` ou `systemd-inhibit` no `PATH` ⇒ mensagem `dependência de diagnóstico ausente: <nome>`
-e exit 1.
+e exit 1. `mate-screensaver-command` é **opcional** (diagnóstico complementar no MATE); a ausência
+dele não falha.
 
 **Fluxo:**
 
@@ -486,7 +518,9 @@ e exit 1.
 5. `deskawake status` ⇒ exit 0 e stdout `on`.
 6. Backend:
    - **MATE** (`XDG_CURRENT_DESKTOP` contém `MATE`): `gdbus` em `org.mate.ScreenSaver.GetInhibitors`
-     contém `Application="deskawake"`; `org.gnome.SessionManager.IsInhibited(8)` ⇒ `(true,)`.
+     contém `Application="deskawake"`. **Não** exigir `IsInhibited(8)`: o mate-screensaver 1.26.2
+     não expõe esse método. Se `mate-screensaver-command` existir, `-q` deve conter
+     `deskawake`/`inibida`; a ausência do comando não falha (fallback para `GetInhibitors`).
    - **KDE/Plasma**: poll de `PolicyAgent.ActiveInhibitions` por até 8 s (debounce de ~5 s) até
      conter `deskawake` **e** `DeskAwake active`; `HasInhibition(4)` ⇒ `(true,)`. Não usa
      `CanSuspend`.
@@ -495,8 +529,9 @@ e exit 1.
 8. Poll de até 3 s: `systemd-inhibit --list` sem `DeskAwake` (o filho tem até 2 s para morrer).
 9. `deskawake status` ⇒ exit 1 e stdout `off`.
 10. Backend:
-    - **MATE**: poll até `GetInhibitors` sem `deskawake`; `IsInhibited(8)` é **informativo** (outro
-      app pode inibir idle) e não falha sozinho.
+    - **MATE**: poll até `GetInhibitors` sem `deskawake`; se `mate-screensaver-command` existir, `-q`
+      não deve mais listar `deskawake`. `IsInhibited(8)` **não** é usado (ausente no 1.26.2); se uma
+      versão futura expuser, é informativo e não falha sozinho.
     - **KDE**: poll até `ActiveInhibitions` sem `deskawake`; `HasInhibition(4)` é **informativo**
       depois do OFF (é global).
 11. Saída final `verify: OK` (exit 0) ou `verify: FALHOU` (exit 1), com uma linha `[ok]`/`[falha]`
@@ -515,8 +550,9 @@ e exit 1.
   `KDE indisponível: kpackagetool6 ausente` e `alvo KDE indisponível: kpackagetool6 ausente`.
 - `uninstall.sh`: contém `--purge`, `Quit`, `GetConnectionUnixProcessID`, `-t Plasma/Applet -r`,
   `~/.local/state/deskawake` e **não** contém `pkill -f`.
-- `verify.sh`: contém `systemd-inhibit --list`, `GetInhibitors`, `IsInhibited`, `ActiveInhibitions`,
-  `HasInhibition`, `CanSuspend` **ausente**, poll de ~6–8 s e `trap`.
+- `verify.sh`: contém `systemd-inhibit --list`, `GetInhibitors`, `mate-screensaver-command`,
+  `ActiveInhibitions`, `HasInhibition`, `CanSuspend` **ausente**, poll de ~6–8 s e `trap`;
+  **não** exige `IsInhibited` (ausente no mate-screensaver 1.26.2).
 - `data/*.service` e `data/*.desktop`: parse com `configparser` (chaves case-sensitive), chaves
   obrigatórias, `@EXEC@`, `Name`/`Type`/`Exec` corretos, `OnlyShowIn=MATE;` no widget, ausência de
   caminhos `/home/<algo>` fixos.
@@ -576,6 +612,13 @@ e exit 1.
 8. Limitações: debounce de ~5 s no KDE; tampa/suspensão manual; Plasmoid manual; `kpackagetool6`
    ausente no Mint; GTK bloqueado em Wayland (`--force` só depuração); `Configurar` do Plasmoid sem
    categorias; `install.sh` não interrompe daemon em upgrade; `verify.sh` termina OFF.
+   **MATE (validação 21/11/2026):** “Mostrar área de trabalho” (Ctrl+Alt+D) esconde o widget
+   enquanto o desktop está à mostra e ele volta ao restaurar (A1); `auto` resolve pelo nome do tema
+   porque `gtk-application-prefer-dark-theme` não existe no `org.mate.interface` do Mint 22.3 (A4);
+   `error` por queda de backend preserva o `systemd-inhibit` e libera o inibidor MATE (A2);
+   `IsInhibited(8)` não existe no mate-screensaver 1.26.2 — o diagnóstico usa `GetInhibitors` e,
+   quando disponível, `mate-screensaver-command -q` (A3); o teste de idle com delay curto exige uma
+   sessão nova (o delay é lido no login) e o lock é destrutivo/opcional (A5).
 9. Desenvolvimento e testes: `sudo apt install python3-pytest` (aqui o `sudo` é do usuário, não do
    script), `python3 -m pytest`, `dbus-run-session -- python3 -m pytest tests/integration`,
    `python3 -m pytest tests/integration -m slow`, `bash -n`, `shellcheck` opcional.
@@ -715,9 +758,9 @@ e exit 1.
     e exige `PYTHONPATH`.
   - C: `busctl`: menos portátil que `gdbus` no Mint/Kubuntu; `libglib2.0-bin` já é dependência.
 - **Decisão:** A. `XDG_CURRENT_DESKTOP` escolhe MATE/KDE; desconhecido faz só as checagens genéricas.
-  Durante o ON, MATE exige `GetInhibitors` + `IsInhibited(8)` e KDE exige `ActiveInhibitions` +
-  `HasInhibition(4)`; depois do OFF, só a ausência da entrada `deskawake` é obrigatória, porque
-  `IsInhibited`/`HasInhibition` são globais.
+  Durante o ON, MATE exige `GetInhibitors` (+ `mate-screensaver-command -q` quando existir) e KDE
+  exige `ActiveInhibitions` + `HasInhibition(4)`; depois do OFF, só a ausência da entrada `deskawake`
+  é obrigatória. No MATE `IsInhibited(8)` não existe no 1.26.2; `HasInhibition` é global.
 - **Consequências:** o verify funciona com o daemon instalado e sem GUI; não testa `CanSuspend`;
   outro app inibindo idle não faz o DeskAwake falhar; o `trap` garante OFF mesmo em erro.
 
@@ -767,7 +810,8 @@ e exit 1.
 4. Gera `~/.local/bin/deskawake`, `.service`, autostart do daemon e autostart do widget.
 5. Resumo: execute `deskawake ui` ou saia/entre para o autostart; o daemon sobe por autostart ou
    pelo `.service` na primeira ação.
-6. `./verify.sh` liga/desliga e confere `systemd-inhibit`, `GetInhibitors` e `IsInhibited(8)`.
+6. `./verify.sh` liga/desliga e confere `systemd-inhibit`, `GetInhibitors` e, quando disponível,
+   `mate-screensaver-command -q`.
 
 ### 6.2 Instalação no Kubuntu/Plasma
 
@@ -807,14 +851,16 @@ e exit 1.
 [ok] systemd-inhibit contém DeskAwake
 [ok] status = on
 [ok] GetInhibitors contém deskawake
-[ok] IsInhibited(8) = true
+[ok] mate-screensaver-command -q lista deskawake   # quando o comando existir
 [ok] daemon respondeu off
 [ok] sem systemd-inhibit órfão
 [ok] GetInhibitors liberou deskawake
+[ok] mate-screensaver-command -q sem deskawake      # quando o comando existir
 verify: OK
 ```
 
-`IsInhibited(8)` depois do OFF é mostrado como informação; se outro app estiver inibindo idle, o
+`mate-screensaver-command` é opcional; quando ausente, o verify usa só `GetInhibitors`.
+`IsInhibited(8)` não é usado no MATE (ausente no 1.26.2); se outro app estiver inibindo idle, o
 verify não falha por isso.
 
 ### 6.6 `verify.sh` — KDE
@@ -907,9 +953,10 @@ python3 -m pytest tests/integration/test_installer_scripts.py -v
 
 ### 9.2 Manual — Mint 22.3 MATE/X11
 
-> **Status:** **pendente** — esta é a pendência aberta da §1.4. O merge da E4 e os testes headless
-> não substituem esta checklist; o MATE só é declarado validado quando todos os itens abaixo forem
-> executados na máquina Mint.
+> **Status:** **pendente de fechamento** — a UI GTK (E4) já foi pré-validada visual/funcionalmente
+> em **21/11/2026** na máquina Mint 22.3 MATE/X11; resultados e achados A1–A7 na §1.4. O merge da
+> E4 e os testes headless não substituem esta checklist; o MATE só é declarado validado quando os
+> itens abaixo forem executados e os achados resolvidos/documentados.
 
 1. `./install.sh --only-mate`; conferir `$SHARE`, launcher, `.service`, autostart do daemon e do
    widget, permissões 755/644.
@@ -918,13 +965,22 @@ python3 -m pytest tests/integration/test_installer_scripts.py -v
 3. `./install.sh --only-kde` no Mint: exit ≠ 0 e mensagem clara; nada copiado.
 4. `./install.sh --install-deps`: comandos `apt` com `fonts-inter` separado, sem `sudo` no output.
 5. Reexecutar `./install.sh --all` duas vezes: exit 0, sem estado quebrado.
-6. `./verify.sh`: `on` → lock + `GetState()=="on"`; `GetInhibitors` contém `deskawake`;
-   `IsInhibited(8)` verdadeiro; `off` → lock ausente e sem órfãos.
+6. `./verify.sh`: `on` → lock + `GetState()=="on"`; `GetInhibitors` contém `deskawake`; `off` →
+   lock ausente e sem órfãos. **Não** usar `IsInhibited(8)` (ausente no mate-screensaver 1.26.2);
+   se `mate-screensaver-command` existir, conferir a saída de `-q`.
 7. `./uninstall.sh`: remove tudo exceto `~/.config/deskawake/`; segunda execução exit 0; tolera
    `kpackagetool6` ausente; `--purge` remove a config.
 8. Login novo ou `deskawake ui`: widget abre; “Iniciar com o sistema” reflete o autostart.
 9. Checklists da spec (E4) copiadas no README: itens não-destrutivos obrigatórios; destrutivos
    marcados como opcionais.
+10. **Achados da pré-validação (A1–A6 da §1.4):** “Mostrar área de trabalho” esconde o widget e ele
+    volta ao restaurar (decidir limitação × correção de E4); `error` de queda de backend preserva o
+    `systemd-inhibit` (alinhar com o mapa) e `error` de ativação/verificação libera tudo; `auto` só
+    pelo nome do tema; repetir o submenu `Tema` com mouse real.
+11. **Idle/lock:** o `idle-delay` é lido no login; para testar 1 min, abrir uma sessão nova ou
+    registrar a confirmação do usuário de que OFF restaura o screensaver. `lock-enabled` é
+    destrutivo/opcional e não bloqueia o aceite.
+12. **Pendências não executadas (A7):** logout, desconexão de monitor externo e bloqueio de tela.
 
 ### 9.3 Manual — Kubuntu 26.04.1 / Plasma 6.6
 
@@ -956,7 +1012,13 @@ python3 -m pytest tests/integration/test_installer_scripts.py -v
 
 | Risco | Onde fecha |
 |---|---|
-| **Implementação/validação MATE pendente** | **Pendência aberta da §1.4:** ajustes e checklist da §9.2 na máquina Mint; o merge da E4 e os testes headless não bastam |
+| **Ajustes/validação MATE pendentes** | **Pendência aberta da §1.4:** achados A1–A7 e checklist da §9.2 na máquina Mint; o merge da E4 e os testes headless não bastam |
+| **“Mostrar área de trabalho” esconde o widget** | Achado A1 da §1.4: documentar como limitação no README ou corrigir hints em E4 (fora do escopo); não afirmar “visível com desktop à mostra” sem decisão |
+| **`error` × `systemd-inhibit`** | Achado A2: alinhar spec/checklist/README ao `DELIVERY_MAP` item 9 (queda de backend preserva o filho) |
+| **`IsInhibited(8)` ausente no MATE real** | Achado A3: `verify.sh` usa `GetInhibitors`/`mate-screensaver-command`; `IsInhibited` só no fake |
+| **`prefer-dark` ausente no MATE 1.26** | Achado A4: `auto` pelo nome do tema; documentado no README |
+| **Idle delay e lock** | Achados A5/A7: delay lido no login; testar em sessão nova; lock é opcional/destrutivo |
+| **Auto-respawn do mate-screensaver** | O serviço volta via D-Bus/systemd em ~1 s; o `error` ao matar o processo é transitório; para validar tooltip é preciso mantê-lo ausente |
 | `shellcheck` ausente nas máquinas validadas | `bash -n` no gate + revisão manual; README registra |
 | `kpackagetool6` 2.0 com `-u`/`-r` em versões diferentes | Teste falso + validação manual no Kubuntu; fallback `-i`/`rm -rf` |
 | Autostart no login não exercitado automaticamente | Checklist manual Mint/Kubuntu + README |
@@ -964,7 +1026,7 @@ python3 -m pytest tests/integration/test_installer_scripts.py -v
 | Caminhos com espaços/aspas | Teste de sandbox com `tmp_path`; documentado que aspas/newline não são suportados |
 | `XDG_DATA_HOME` customizado | `$SHARE` e `.service` seguem o XDG; config/autostart continuam em `$HOME/.config` (E1/E4) |
 | Daemon rodando durante upgrade | Decisão de não interromper; README explica como reiniciar |
-| `verify.sh` em máquina com outro inibidor global | Só a entrada `deskawake` é obrigatória após o OFF; `HasInhibition`/`IsInhibited` são informativos |
+| `verify.sh` em máquina com outro inibidor global | Só a entrada `deskawake` é obrigatória após o OFF; `HasInhibition` (KDE) e `mate-screensaver-command -q` (MATE) são informativos; `IsInhibited` não é usado no MATE |
 | Plasmoid em uso durante `-u`/`-r` | Plasma pode exigir reabrir o widget/reiniciar o plasmashell; documentado |
 | `Configurar` do Plasmoid sem categorias | Limitação da E5, documentada no README |
 | Tampa/suspensão manual continuam | Aviso destacado no README; teste destrutivo opcional no Kubuntu |
@@ -976,10 +1038,14 @@ python3 -m pytest tests/integration/test_installer_scripts.py -v
 1. Aprovar este design **WIP** e manter a §1.4 aberta (MATE).
 2. **Feito em 2026-11-21:** E1–E5 mergeadas na `main` (PRs #4, #5, #7, #8 e #10); branch
    `feat/e6-instalador-verificacao-docs` criada a partir da `main` pós-merges, com este design.
-3. **Pendência do usuário:** ajustes de implementação MATE e validação na máquina Mint (§1.4 e
-   §9.2). Não fechar a E6 sem essa validação.
-4. Gerar `docs/implementation/tasks_e6.md` com `/spec:tasks docs/implementation/` (ou implementar
+3. **Pendência do usuário:** incorporar os achados A1–A7 da §1.4 (documentação/`verify.sh`/READMEs
+   + decisão sobre “mostrar área de trabalho”) e completar a checklist da §9.2 na máquina Mint.
+   Não fechar a E6 sem essa validação.
+4. **Ajustes de documentação/verificação (E6):** alinhar spec/checklist ao `DELIVERY_MAP` item 9
+   (A2), trocar `IsInhibited(8)` por `GetInhibitors`/`mate-screensaver-command` (A3), registrar
+   `prefer-dark`/idle/lock (A4/A5) e a limitação de “mostrar área de trabalho” (A1) nos READMEs.
+5. Gerar `docs/implementation/tasks_e6.md` com `/spec:tasks docs/implementation/` (ou implementar
    direto com `/implement docs/implementation/`).
-5. Implementar na ordem: templates/READMEs estáticos → testes RED → `install.sh` →
+6. Implementar na ordem: templates/READMEs estáticos → testes RED → `install.sh` →
    `uninstall.sh` → `verify.sh` → smoke de sandbox → gate automatizado → checklists manuais →
    PR.
