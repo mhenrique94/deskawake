@@ -1,6 +1,16 @@
 # Design: E5 — Plasmoid KDE Plasma 6.6
 
-**Feature:** DeskAwake — E5 | **Data:** 2026-11-20 | **Status:** Draft hidratado contra o Plasma 6.6.7 instalado em 2026-11-20 — decisões da §1.1 aprovadas; pendente revisão final
+**Feature:** DeskAwake — E5 | **Data:** 2026-11-20 | **Status:** Parcialmente superado pelo spec de repaginação de 2026-11-21 (geometria, anatomia, menu e chip adaptativo); o contrato D-Bus, liveness, estados e testes daqui permanecem válidos.
+
+> **Contrato visual/layout a partir de 2026-11-21:** a repaginação do Plasmoid (2026-11-21) está
+> consolidada neste design e na `spec.md` — geometria ajustável 168×44→300×84,
+> hamburguer com menu, chip adaptativo ao wallpaper e `preview.png` de pacote. As partes deste
+> design que descrevem geometria, anatomia, tokens, árvore QML, menu e chip (por exemplo §1.1–1.2,
+> §2.1–2.5, §4.2, §4.6, §4.9, §6.4, §9, os ADRs 01/05/06/07/08/09 e as menções a 124×42 na §11)
+> permanecem como **histórico do desenho original**. Permanecem válidos o contrato D-Bus (§4.3),
+> liveness (§2.6/§4.8), estados/tempos (§4.4–4.5) e os testes estáticos (ADR-10). O
+> `design_visual_aprovado.md` (E4) não é alterado.
+
 **Referência:** [`spec.md`](spec.md) (decisões 1–33, “Fluxo alvo”, “Contratos”, “Aparência”, “Notas ao
 implementador” e “Variações por distro”), [`DELIVERY_MAP.md`](DELIVERY_MAP.md) §E5,
 [`design_e2.md`](design_e2.md) (contrato D-Bus e liveness), [`design_e3.md`](design_e3.md)
@@ -25,7 +35,8 @@ animação aprovadas).
 ## 1. Contexto e limite da entrega
 
 A E5 entrega o **Plasmoid nativo do Plasma 6.6** que substitui o widget GTK no Kubuntu/Wayland:
-mesma pílula de 124×42, mesmo contrato D-Bus da E2, transporte nativo
+pílula redimensionável (168×44→300×84) com hamburguer/menu e chip adaptativo ao wallpaper, mesmo
+contrato D-Bus da E2, transporte nativo
 `org.kde.plasma.workspace.dbus`, arrasto nativo do containment e menu enxuto. Nenhuma linha de QML
 pode depender de `Plasma5Support`, `gdbus`, `DataSource` ou polling.
 
@@ -34,7 +45,7 @@ pode depender de `Plasma5Support`, `gdbus`, `DataSource` ou polling.
 | Arquivo | Responsabilidade |
 |---|---|
 | `plasmoid/metadata.json` | Metadados do pacote KPackage, requisito de Plasma ≥ 6.4 e identidade do applet |
-| `plasmoid/contents/ui/main.qml` | UI 124×42, tema via `Kirigami.Theme`, transporte D-Bus, liveness, spinner, menu e estados |
+| `plasmoid/contents/ui/main.qml` | UI redimensionável 168×44→300×84, chip adaptativo, menu hamburguer, transporte D-Bus, liveness, spinner e estados |
 | `plasmoid/contents/ui/assets/deskawake.svg` | Cópia **verbatim** de `docs/implementation/visual/assets/deskawake.svg` (símbolo aprovado) |
 | `plasmoid/contents/ui/assets/spinner.svg` | Cópia **verbatim** de `docs/implementation/visual/assets/spinner.svg` (spinner aprovado) |
 | `tests/unit/test_plasmoid_assets.py` | Verificação estática (não-GUI) de metadados, proibições, tokens e assets |
@@ -63,8 +74,8 @@ spec/mapa deixavam abertos; nenhuma altera as decisões 1–33 do produto.
 | # | Tema | Decisão confirmada |
 |---|---|---|
 | 1 | Assets do Plasmoid | **Copiar os SVGs aprovados para o pacote** em `plasmoid/contents/ui/assets/` (verbatim de `docs/implementation/visual/assets/`) e renderizar com `Kirigami.Icon` (`isMask: true` + `color`). São dois arquivos novos além da tabela da E5, mas o pacote fica autocontido e a geometria aprovada não é redesenhada. |
-| 2 | Fonte do nome | **10 px semibold, com a família de `Kirigami.Theme.defaultFont`**. Espelha a pílula aprovada na E4/visual e cabe exatamente no slot de 58 px; o tamanho padrão do tema (Noto Sans 10 pt ≈ 13 px) elidiria “DeskAwake”. |
-| 3 | Superfície da pílula | **`Kirigami.Theme.backgroundColor` a 88% de opacidade**, com borda neutra derivada de `Kirigami.Theme.textColor` (alpha ~18%, ~28% no hover). Preserva a translucidez de 82–90% e a forma aprovada. |
+| 2 | Fonte do nome | **10→14 px semibold, com a família de `Kirigami.Theme.defaultFont`** (repaginado em 21/11/2026). Sem slot fixo; o nome é dimensionado por interpolação e usa `elide` apenas como segurança para fontes de fallback mais largas. |
+| 3 | Superfície da pílula | **Chip adaptativo ao wallpaper** (escuro `#20252B` / claro `#F0F3F5`, a 88% com histerese 0,42/0,58), com borda derivada da tinta e fallback para `Kirigami.Theme.backgroundColor`/`textColor` quando não há amostra válida (repaginado em 21/11/2026). |
 | 4 | Spinner de verificação | **Somente após um ON iniciado pelo próprio widget**: timer local de 6000 ms depois de `SetActive(true)` responder `"on"`. Mudanças externas (`StateChanged("on")` de outro cliente) não mostram o spinner de verificação. |
 
 ### 1.2 Decisões derivadas (sem alterar produto)
@@ -74,10 +85,10 @@ ficam registradas para revisão, mas não são decisões de produto novas.
 
 | Tema | Leitura adotada | Base |
 |---|---|---|
-| Raiz do Plasmoid | `PlasmoidItem` é a própria `fullRepresentation` (sem `compactRepresentation`), com as seis restrições `Layout.minimum/preferred/maximumWidth/Height` = 124/42 | Decisão 16 e nota “Não usar `width: 124` solto no `PlasmoidItem`” |
+| Raiz do Plasmoid | `PlasmoidItem` é a própria `fullRepresentation` (sem `compactRepresentation`), com as seis restrições `Layout.minimum/preferred/maximumWidth/Height` = 168×44 / 184×48 / 300×84 | Decisão 16 (repaginada em 21/11/2026) |
 | Fundo do applet | `Plasmoid.backgroundHints: PlasmaCore.Types.NoBackground` | A pílula desenha a própria superfície; o fundo nativo adicionaria sombra/forma |
 | Ação de estado | A UI chama `SetActive(bool)`, nunca `Toggle` | Coerente com a E4; idempotente e seguro se outro cliente mudar o estado |
-| Menu | `Plasmoid.contextualActions` com `PlasmaCore.Action`; itens nativos do Plasma não são recriados nem removidos | Decisão 16 e E5.3 do mapa |
+| Menu | `Plasmoid.contextualActions` com `PlasmaCore.Action` **e** `PlasmaComponents.Menu` no hamburguer, reutilizando os mesmos objetos de ação; itens nativos do Plasma não são recriados nem removidos | Decisão 16 (repaginada em 21/11/2026) e E5.3 do mapa |
 | `Sair` | `SetActive(false)` → `Quit()`; **não remove o widget** da área de trabalho; se o daemon já caiu, apenas fecha o menu | E5.3 item 9 e E5.4 (“Remover o widget não desliga o estado de outros clientes”) |
 | Tooltip | `PlasmaCore.ToolTipArea` na pílula; motivo do erro via `GetLastError()`; `PlasmoidItem.toolTip*` só alimenta o painel | Decisão 12/16; o containment de desktop não consome `PlasmoidItem.toolTip*` |
 | Configuração | Sem `config.qml`/KConfigXT; “Configurar” nativo aparece, mas sem categorias | Fora de escopo; a spec pede o item e a limitação será documentada na E6 |
