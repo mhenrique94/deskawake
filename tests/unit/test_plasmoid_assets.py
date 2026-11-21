@@ -120,6 +120,19 @@ def test_main_qml_fixes_inner_slots():
         assert count(rf"Layout\.{mode}Height:\s*18\b") >= 1
 
 
+def test_main_qml_keeps_pill_compact_inside_containment_cell():
+    source = _qml()
+    tooltip = re.search(r"PlasmaCore\.ToolTipArea \{(.*?)\n    \}", source, re.DOTALL)
+
+    assert tooltip is not None
+    body = tooltip.group(1)
+    assert "anchors.centerIn: parent" in body
+    assert "width: root.pillWidth" in body
+    assert "height: root.pillHeight" in body
+    assert "readonly property int pillWidth: 124" in source
+    assert "readonly property int pillHeight: 42" in source
+
+
 def _function_body(source: str, name: str) -> str:
     start = source.index(f"function {name}")
     following = re.search(r"\n    function ", source[start + 1 :])
@@ -311,9 +324,18 @@ def test_main_qml_error_state_refreshes_last_error():
 
     assert handler is not None
     body = handler.group(1)
-    assert "applyState(state)" in body
-    assert 'state === "error"' in body
+    assert "String(state)" in body
+    assert "applyState(value)" in body
+    assert 'value === "error"' in body
     assert "requestLastError()" in body
+
+
+def test_main_qml_normalizes_signal_payload():
+    body = _function_body(_qml(), "applyState")
+
+    assert "String(newState)" in body
+    assert 'value !== "on"' in body
+    assert "root.state = value" in body
 
 
 def test_main_qml_watchers_precede_getstate():

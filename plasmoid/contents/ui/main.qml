@@ -14,6 +14,8 @@ PlasmoidItem {
     readonly property string objectPath: "/org/local/DeskAwake"
     readonly property string ifaceName: "org.local.DeskAwake"
     readonly property int verifyWindowMs: 6000
+    readonly property int pillWidth: 124
+    readonly property int pillHeight: 42
 
     property string state: "off"
     property string lastError: ""
@@ -41,8 +43,9 @@ PlasmoidItem {
         iface: root.ifaceName
 
         function dbusStateChanged(state) {
-            root.applyState(state)
-            if (state === "error") {
+            const value = String(state)
+            root.applyState(value)
+            if (value === "error") {
                 root.requestLastError()
             }
         }
@@ -72,9 +75,13 @@ PlasmoidItem {
         onTriggered: root.stopVerification()
     }
 
+    // O containment do desktop reserva uma célula maior que a pílula; manter a pílula
+    // em 124×42 centralizada preserva a forma aprovada independentemente da célula.
     PlasmaCore.ToolTipArea {
         id: pillToolTip
-        anchors.fill: parent
+        anchors.centerIn: parent
+        width: root.pillWidth
+        height: root.pillHeight
         mainText: "DeskAwake"
         subText: root.state === "error" ? root.lastError : ""
         textFormat: Text.PlainText
@@ -253,14 +260,17 @@ PlasmoidItem {
     }
 
     function applyState(newState) {
-        if (newState !== "on" && newState !== "off" && newState !== "error") {
+        // O motor JS entrega o argumento do sinal como objeto String; normalizar permite
+        // as comparações estritas com os tokens públicos do contrato.
+        const value = String(newState)
+        if (value !== "on" && value !== "off" && value !== "error") {
             return
         }
-        if (newState !== "error") {
+        if (value !== "error") {
             root.lastError = ""
         }
-        root.state = newState
-        if (newState !== "on") {
+        root.state = value
+        if (value !== "on") {
             root.stopVerification()
         }
     }
