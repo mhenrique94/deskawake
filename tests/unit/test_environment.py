@@ -2,6 +2,7 @@ import pytest
 
 import core.environment
 from core.environment import BACKEND_BUS_NAMES, detect_environment, is_wayland
+from dbus_contract import BACKEND_NAMES as BACKEND_BUS
 
 BACKEND_NAMES = ("fdo", "mate", "gsm", "policyagent")
 TOOL_NAMES = ("kpackagetool6", "gdbus", "systemd-inhibit")
@@ -128,7 +129,7 @@ def test_kpackagetool6_absent_is_false_without_exception():
 
 
 def test_backends_by_name_owner():
-    bus = FakeBus(owned={"org.mate.ScreenSaver", "org.gnome.SessionManager"})
+    bus = FakeBus(owned={BACKEND_BUS["mate"], BACKEND_BUS["gsm"]})
 
     environment = _detect(bus=bus)
 
@@ -160,9 +161,9 @@ def test_detection_only_uses_name_has_owner():
 )
 def test_backend_failure_does_not_abort_detection(exception):
     bus = FailingBus(
-        failing_name="org.mate.ScreenSaver",
+        failing_name=BACKEND_BUS["mate"],
         exception=exception,
-        owned={"org.gnome.SessionManager"},
+        owned={BACKEND_BUS["gsm"]},
     )
 
     environment = _detect(bus=bus)
