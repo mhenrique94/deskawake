@@ -114,13 +114,13 @@ verificado por `git archive` da branch E4).
 | `Plasmoid.toolTipMainText`/`Plasmoid.toolTipSubText` não existem no objeto anexado | `toolTip*` está em `PlasmoidItem` (`plasmoidplugin.qmltypes`); `applet.h` tem TODO explícito; applets instalados usam `toolTipMainText`/`toolTipSubText` sem prefixo | Corrigido para `toolTipMainText`, `toolTipSubText` e `toolTipTextFormat: Text.PlainText` |
 | `busType: Session` não resolve | O enum é `BusType` no módulo; o exemplo-fonte usa `BusType.Session`; com alias, `DBus.BusType.Session` | Corrigido nos dois watchers |
 | `Rectangle` não tem `hovered`; `PlasmoidItem.toolTip*` não é consumido pelo containment de desktop | Hover vem de `ToolTipArea.containsMouse`; no painel, `CompactApplet.qml`/`DefaultCompactRepresentation.qml` consomem `toolTip*`; `BasicAppletContainer.qml` (desktop) não tem `ToolTipArea` | Pílula envolvida por `PlasmaCore.ToolTipArea`; a borda usa `pillToolTip.containsMouse`; `toolTip*` do `PlasmoidItem` fica só para painel/compatibilidade |
-| Slots 22/58/32 sem limites | A aritmética de 124 depende de larguras fixas; `RowLayout` pode crescer o `Text` | Adicionadas restrições min/pref/max aos três slots |
+| Slots 22/58/32 sem limites | A aritmética de 124 dependia de larguras fixas; `RowLayout` podia crescer o `Text` | **Histórico (pré-repaginação).** O layout atual usa escala contínua (`logoSize`, `namePixelSize`, `toggleWidth`/`toggleHeight`, etc.) e não tem slots fixos; o nome usa `elide` só como segurança. |
 | `kpackagetool6 -i ./plasmoid` **sem `-t`** não instala como Plasmoid | Teste real: foi para `~/.local/share/kpackage/generic/`; com `-t Plasma/Applet` foi para `~/.local/share/plasma/plasmoids/` | Todos os comandos passam a usar `-t Plasma/Applet` (inclusive `--upgrade`/`-r`); a E6 deve ser ajustada |
 | `Configurar` aparece sem `config.qml` e abre configuração sem categorias | Sonda: `visible=true`, `enabled=true`, `hasConfigurationInterface=true`; `AppletPrivate::init` liga a flag | Mantido (a spec pede o item); limitação documentada nas §4.6/§11 e na E6 |
-| `plasmawindowed` não prova 124×42 | Ele abriu 500×500 e esticou o applet; `Layout.minimumWidth` lido foi 124 | Usado só como smoke de carregamento; a pílula é fixada em 124×42 dentro da célula do containment e validada na checklist |
-| Célula do containment de desktop maior que a pílula | Teste real: `ItemGeometries=Applet-134:96,1056,128,96` e `root.width/height=128/96`; o `AppletsLayout` usa `minimumItemHeight = gridUnit*3` | A pílula visível é fixada em 124×42 e centralizada no `PlasmoidItem`; as seis restrições `Layout.*` continuam na raiz para painel/compatibilidade |
+| `plasmawindowed` não prova 124×42 | Ele abriu 500×500 e esticou o applet; `Layout.minimumWidth` lido foi 124 | **Histórico.** O smoke de carregamento continua; a validação atual usa 168×44, 184×48 e 300×84. |
+| Célula do containment de desktop maior que a pílula | Teste real: `ItemGeometries=Applet-134:96,1056,128,96` e `root.width/height=128/96`; o `AppletsLayout` usa `minimumItemHeight = gridUnit*3` | **Superado pela repaginação:** a pílula preenche a raiz redimensionável; um widget novo é adicionado em 184×48 (192×64 de container) e o Plasma persiste a geometria. |
 | `StateChanged` chega como objeto `String` | Com `applyState(state)` estrito, o handler registrava `on` mas `applyState` saía antes de atualizar; o valor é um objeto do motor JS | `dbusStateChanged` e `applyState` normalizam com `String(...)` antes de comparar |
-| Baseline 233 não vale nesta branch | `tests/unit` = 192; 233 é E4+E5 | Gate da E5 usa 219 (192 + 27 testes novos); se a E4 for mergeada antes, 260 |
+| Baseline 233 não vale nesta branch | `tests/unit` = 192; 233 é E4+E5 | A baseline atual desta branch é **226** (34 no arquivo estático + o restante); a E4, se mergeada, soma os testes dela |
 | `qmllint` ausente | `command -v qmllint` vazio | Smoke local via `plasmawindowed`; sem dependência nova |
 | Assets aprovados estão em `docs/` | `docs/implementation/visual/assets/*.svg` são a referência aprovada | Teste compara bytes quando presentes e valida SHA-256 dos assets do pacote como piso independente de docs |
 
@@ -129,9 +129,9 @@ verificado por `git archive` da branch E4).
 - `PlasmoidItem` com conteúdo direto e **sem** `fullRepresentation` é suportado:
   `AppletQuickItem::init()` comenta que “the only representation available are whatever items
   defined directly inside PlasmoidItem” e `appletShouldBeExpanded()` retorna `true` nesse caso.
-- As seis restrições `Layout.*` na raiz são lidas pelo `BasicAppletContainer.qml`, mas o
-  `AppletsLayout` do desktop impõe uma célula mínima maior (observado 128×96); por isso a pílula
-  visível é fixada em 124×42 dentro da célula.
+- As seis restrições `Layout.*` na raiz são lidas pelo `BasicAppletContainer.qml`; após a
+  repaginação a pílula preenche a raiz redimensionável, o Plasma persiste tamanho e posição, e um
+  widget novo é adicionado em 184×48 (192×64 de container).
 - `DBusServiceWatcher` faz a checagem inicial síncrona em `componentComplete()`; `SignalWatcher`
   conecta em `componentComplete()` e o handler é `dbus` + nome do sinal (`dbusStateChanged`).
 - O handler do `SignalWatcher` recebe o argumento como objeto `String` do motor JS; a normalização
@@ -445,7 +445,7 @@ Contratos das funções internas (sem código de implementação nesta fase):
 | `applyState(state)` | aceita somente `on`/`off`/`error`; atualiza trilho/rótulo/tooltip; sai de `error` limpando `lastError`; entrada em `error`/`off` para os spinners |
 | `requestLastError()` | `GetLastError` somente com dono; preenche `lastError`; nunca exibe diálogo |
 | `requestActive(active)` | ignora se `callPending`; cancela verificação; `SetActive` com `"(b)"`; no reply, aplica o estado e, se `active && state == "on"`, inicia a verificação |
-| `quitDaemon()` | sem dono, retorna; senão `SetActive(false)` e, ao terminar (sucesso ou erro), `Quit()` se ainda houver dono |
+| `quitDaemon()` | sem dono, retorna; senão `SetActive(false)`; se a resposta for `error`, consulta `GetLastError()` antes de encerrar; ao terminar (sucesso ou erro), `Quit()` se ainda houver dono |
 | `startVerification()` | só após ON próprio; `verifying = true` e reinicia o Timer |
 | `stopVerification()` | `verifying = false` e para o Timer; idempotente |
 | `invalidateCalls()` | incrementa `callToken`, zera `callPending` e `verifying`; usado na queda do daemon |
