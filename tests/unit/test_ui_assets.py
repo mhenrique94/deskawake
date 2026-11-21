@@ -154,3 +154,71 @@ def test_core_has_no_gdk():
             if "gi.repository" in line and "Gtk" in line:
                 offenders.append(path)
     assert offenders == []
+
+
+WIDGET = REPO_ROOT / "ui_gtk" / "widget.py"
+THEME = REPO_ROOT / "ui_gtk" / "theme.py"
+
+
+def test_widget_menu_has_about_before_quit():
+    source = WIDGET.read_text(encoding="utf-8")
+    entries = (
+        'Gtk.MenuItem(label="Ativar")',
+        'Gtk.MenuItem(label="Tema")',
+        'Gtk.CheckMenuItem(label="Iniciar com o sistema")',
+        'Gtk.MenuItem(label="Sobre o DeskAwake…")',
+        'Gtk.MenuItem(label="Sair")',
+    )
+    positions = [source.index(entry) for entry in entries]
+    assert positions == sorted(positions)
+    assert "Gtk.AboutDialog" in source
+    assert "core.__version__" in source
+
+
+def test_about_puts_author_in_body_and_links_repository_and_site():
+    source = WIDGET.read_text(encoding="utf-8")
+    assert "https://github.com/mhenrique94/deskawake" in source
+    assert "Repositório no GitHub" in source
+    assert "https://manivasoftware.com.br" in source
+    assert "manivasoftware.com.br" in source
+    assert "Gtk.LinkButton" in source
+    assert "Marcelo Silva" in source
+    assert "Maniva Software" in source
+    assert "Licença MIT" in source
+    # O nome no corpo não deve recriar o botão "Créditos" do GTK.
+    assert "set_authors" not in source
+    assert "set_license_type" not in source
+
+
+def test_widget_does_not_use_desktop_hint():
+    source = WIDGET.read_text(encoding="utf-8")
+    assert "WindowTypeHint.DESKTOP" not in source
+    assert "WindowTypeHint.UTILITY" in source
+
+
+def test_widget_uses_documented_show_desktop_fallback():
+    source = WIDGET.read_text(encoding="utf-8")
+    assert "WindowTypeHint.DESKTOP" not in source
+    assert "WindowTypeHint.UTILITY" in source
+    # O observador de _NET_SHOWING_DESKTOP foi removido no fallback da E6.
+    assert "property-notify-event" not in source
+    assert "_read_showing_desktop" not in source
+    assert "_desktop_gave_up" not in source
+
+
+def test_widget_has_pointer_and_accessible_names():
+    source = WIDGET.read_text(encoding="utf-8")
+    assert "Gdk.Cursor.new_from_name" in source
+    assert '"pointer"' in source
+    assert "get_accessible().set_name" in source
+    assert "DeskAwake: ativar/desativar" in source
+
+
+def test_tooltip_and_error_helpers_use_markup():
+    widget = WIDGET.read_text(encoding="utf-8")
+    theme = THEME.read_text(encoding="utf-8")
+    assert "set_tooltip_markup" in widget
+    assert "set_tooltip_text" not in widget
+    assert "format_error_tooltip" in widget
+    assert "markup_escape_text" in theme
+    assert "erro sem detalhes" in widget

@@ -1,8 +1,10 @@
 from __future__ import annotations
 
+import logging
 import os
 from pathlib import Path
 
+import core
 import dbus
 import gi
 
@@ -36,11 +38,14 @@ from ui_gtk.theme import (
     TOGGLE_HEIGHT,
     TOGGLE_WIDTH,
     build_css,
+    format_error_tooltip,
     icon_color,
     resolve_variant,
     spinner_frame,
     svg_with_color,
 )
+
+LOGGER = logging.getLogger(__name__)
 
 ROOT = Path(__file__).resolve().parent.parent
 ASSETS_PATH = ROOT / "assets"
@@ -56,6 +61,25 @@ AUTOSTART_DISABLED_LINE = "X-GNOME-Autostart-enabled=false"
 DISABLED_AUTOSTART_LINES = frozenset(
     {HIDDEN_LINE.lower(), AUTOSTART_DISABLED_LINE.lower()}
 )
+
+WINDOW_ACCESSIBLE_NAME = "DeskAwake"
+SWITCH_ACCESSIBLE_NAME = "DeskAwake: ativar/desativar"
+POINTER_CURSOR_NAME = "pointer"
+
+ABOUT_COMMENTS = (
+    "Mantém a tela e o sistema acordados quando ativado.\n\n"
+    "Desenvolvido por Marcelo Silva · Maniva Software.\n"
+    "Licença MIT."
+)
+ABOUT_REPOSITORY = "https://github.com/mhenrique94/deskawake"
+ABOUT_REPOSITORY_LABEL = "Repositório no GitHub"
+ABOUT_WEBSITE = "https://manivasoftware.com.br"
+ABOUT_WEBSITE_LABEL = "manivasoftware.com.br"
+ABOUT_ICON = "preferences-system-power-management"
+ABOUT_LOGO_SIZE = 64
+
+SUBSCRIBE_RETRY_SECONDS = 2
+SUBSCRIBE_RETRY_LIMIT = 5
 
 
 class DeskAwakeWidget:
@@ -79,6 +103,9 @@ class DeskAwakeWidget:
         self.drag_timeout = 0
         self._updating_menu = False
         self._subscribed = False
+        self._subscribe_attempts = 0
+        self._subscribe_source = 0
+        self._pointer_cursor = None
         self._quitting = False
         self.provider = None
         self._symbol_svg = self._read_asset("deskawake.svg")
@@ -111,9 +138,14 @@ class DeskAwakeWidget:
         self.window.set_resizable(False)
         self.window.set_default_size(PILL_WIDTH, PILL_HEIGHT)
         self.window.set_size_request(PILL_WIDTH, PILL_HEIGHT)
+        # “Mostrar área de trabalho” (Ctrl+Alt+D): o Marco iconifica o widget
+        # (_NET_WM_STATE_HIDDEN) e ignora deiconify/MapRequest; present()
+        # cancelaria o modo para todas as janelas. Limitação documentada no
+        # README (E7); nunca usar o hint DESKTOP.
         self.window.set_type_hint(Gdk.WindowTypeHint.UTILITY)
         self.window.set_accept_focus(False)
         self.window.set_focus_on_map(False)
+        self.window.get_accessible().set_name(WINDOW_ACCESSIBLE_NAME)
 
         self.composited = self._is_composited()
         if self.composited and not self._enable_rgba_visual():
@@ -122,6 +154,7 @@ class DeskAwakeWidget:
         self._apply_window_hints()
         self.window.connect("realize", lambda *_: self._apply_window_hints())
         self.window.connect("map", lambda *_: self._apply_window_hints())
+        self.window.connect("destroy", self._on_destroy)
 
     def _apply_window_hints(self) -> None:
         self.window.set_keep_below(True)
@@ -188,6 +221,7 @@ class DeskAwakeWidget:
         )
         self.switch.get_style_context().add_class("deskawake-switch")
         self.switch.set_valign(Gtk.Align.CENTER)
+        self.switch.get_accessible().set_name(SWITCH_ACCESSIBLE_NAME)
 
         self.pill.pack_start(self.icon_stack, False, False, 0)
         self.pill.pack_start(self.name_label, False, False, 0)
@@ -230,6 +264,10 @@ class DeskAwakeWidget:
 
         self.menu.append(Gtk.SeparatorMenuItem())
 
+        self.about_item = Gtk.MenuItem(label="Sobre o DeskAwake…")
+        self.about_item.connect("activate", lambda *_: self._show_about())
+        self.menu.append(self.about_item)
+
         self.quit_item = Gtk.MenuItem(label="Sair")
         self.quit_item.connect("activate", lambda *_: self._quit())
         self.menu.append(self.quit_item)
@@ -242,7 +280,6 @@ class DeskAwakeWidget:
         )
         self.window.add_events(events)
         self.switch.add_events(events)
-
         for widget in (self.window, self.switch):
             widget.connect("button-press-event", self._on_button_press)
             widget.connect("button-release-event", self._on_button_release)
@@ -250,6 +287,7 @@ class DeskAwakeWidget:
 
         self.window.connect("configure-event", self._on_configure)
         self.window.connect("delete-event", self._on_delete)
+        self.switch.connect("realize", lambda *_: self._apply_pointer_cursor())
         self.switch.connect("state-set", self._on_switch_state_set)
         self.switch.connect("activate", self._on_activate)
 
@@ -265,6 +303,24 @@ class DeskAwakeWidget:
         screen = self.window.get_screen()
         if screen is not None:
             screen.connect("composited-changed", self._on_composited_changed)
+
+    def _apply_pointer_cursor(self) -> None:
+        if self._pointer_cursor is not None:
+            return
+        window = self.switch.get_window()
+        if window is None:
+            return
+        display = self.switch.get_display() or Gdk.Display.get_default()
+        if display is None:
+            return
+        try:
+            cursor = Gdk.Cursor.new_from_name(display, POINTER_CURSOR_NAME)
+        except (GLib.Error, TypeError, ValueError, AttributeError):
+            return
+        if cursor is None:
+            return
+        self._pointer_cursor = cursor
+        window.set_cursor(cursor)
 
     def show(self) -> None:
         self._subscribe_signals()
@@ -466,7 +522,12 @@ class DeskAwakeWidget:
             pass
 
     def _subscribe_signals(self) -> None:
-        if self.bus is None or self._subscribed:
+        if self._subscribed:
+            return
+        if self.bus is None:
+            self.bus = self._open_bus()
+        if self.bus is None:
+            self._schedule_subscribe_retry()
             return
         try:
             self.bus.add_signal_receiver(
@@ -484,8 +545,34 @@ class DeskAwakeWidget:
                 arg0=DBUS_NAME,
             )
             self._subscribed = True
+            self._subscribe_attempts = 0
+            if self._subscribe_source:
+                GLib.source_remove(self._subscribe_source)
+                self._subscribe_source = 0
         except (dbus.DBusException, OSError):
             self._subscribed = False
+            self._schedule_subscribe_retry()
+
+    def _schedule_subscribe_retry(self) -> None:
+        if self._subscribed or self._subscribe_source:
+            return
+        if self._subscribe_attempts >= SUBSCRIBE_RETRY_LIMIT:
+            LOGGER.warning(
+                "não foi possível assinar o barramento D-Bus após %s tentativas",
+                SUBSCRIBE_RETRY_LIMIT,
+            )
+            return
+        self._subscribe_source = GLib.timeout_add_seconds(
+            SUBSCRIBE_RETRY_SECONDS, self._retry_subscribe
+        )
+
+    def _retry_subscribe(self) -> bool:
+        self._subscribe_source = 0
+        self._subscribe_attempts += 1
+        self._subscribe_signals()
+        if self._subscribed:
+            self._sync_initial_state()
+        return GLib.SOURCE_REMOVE
 
     def _has_owner(self) -> bool:
         if self.bus is None:
@@ -646,9 +733,12 @@ class DeskAwakeWidget:
         self.switch.set_active(state == "on")
         self._update_busy_state()
         if state == "error":
-            self.window.set_tooltip_text(self.last_error or ERROR_FALLBACK)
+            self.window.set_tooltip_markup(
+                format_error_tooltip(self.last_error or ERROR_FALLBACK)
+            )
         else:
-            self.window.set_tooltip_text(None)
+            self.last_error = ""
+            self.window.set_tooltip_markup(None)
         if not self.call_pending:
             self.icon_stack.set_visible_child_name("symbol")
         self._update_menu()
@@ -773,6 +863,47 @@ class DeskAwakeWidget:
         self.menu.show_all()
         self.menu.popup_at_pointer(event)
         return True
+
+    def _about_logo(self) -> GdkPixbuf.Pixbuf | None:
+        try:
+            return GdkPixbuf.Pixbuf.new_from_file_at_scale(
+                str(ASSETS_PATH / "deskawake.svg"),
+                ABOUT_LOGO_SIZE,
+                ABOUT_LOGO_SIZE,
+                True,
+            )
+        except (GLib.Error, OSError):
+            pass
+        theme = Gtk.IconTheme.get_default()
+        if theme is None:
+            return None
+        try:
+            return theme.load_icon(
+                ABOUT_ICON, ABOUT_LOGO_SIZE, Gtk.IconLookupFlags.FORCE_SIZE
+            )
+        except (GLib.Error, OSError):
+            return None
+
+    def _show_about(self) -> None:
+        dialog = Gtk.AboutDialog(transient_for=self.window, modal=True)
+        dialog.set_program_name("DeskAwake")
+        dialog.set_version(core.__version__)
+        dialog.set_comments(ABOUT_COMMENTS)
+        dialog.set_website(ABOUT_REPOSITORY)
+        dialog.set_website_label(ABOUT_REPOSITORY_LABEL)
+        site_link = Gtk.LinkButton(
+            uri=ABOUT_WEBSITE, label=ABOUT_WEBSITE_LABEL
+        )
+        site_link.set_halign(Gtk.Align.CENTER)
+        dialog.get_content_area().pack_end(site_link, False, False, 0)
+        site_link.show()
+        # Sem os campos de autores/tipo de licença do GTK: eles criariam os
+        # botões "Créditos"/"Licença"; autor e licença ficam no corpo.
+        logo = self._about_logo()
+        if logo is not None:
+            dialog.set_logo(logo)
+        dialog.run()
+        dialog.destroy()
 
     def _on_toggle_item(self, widget) -> None:
         self._send_set_active(self.state != "on")
@@ -922,6 +1053,42 @@ class DeskAwakeWidget:
         self.call_generation += 1
         self._stop_spinner()
         Gtk.main_quit()
+
+    def _on_destroy(self, *_args) -> None:
+        for attribute in (
+            "_subscribe_source",
+            "spinner_source",
+            "drag_timeout",
+        ):
+            source = getattr(self, attribute, 0)
+            if source:
+                GLib.source_remove(source)
+                setattr(self, attribute, 0)
+        if self.bus is not None:
+            for handler, options in (
+                (
+                    self._on_state_changed,
+                    {
+                        "signal_name": "StateChanged",
+                        "dbus_interface": INTERFACE,
+                        "bus_name": DBUS_NAME,
+                    },
+                ),
+                (
+                    self._on_name_owner_changed,
+                    {
+                        "signal_name": "NameOwnerChanged",
+                        "dbus_interface": "org.freedesktop.DBus",
+                        "bus_name": "org.freedesktop.DBus",
+                        "path": "/org/freedesktop/DBus",
+                        "arg0": DBUS_NAME,
+                    },
+                ),
+            ):
+                try:
+                    self.bus.remove_signal_receiver(handler, **options)
+                except (dbus.DBusException, OSError, ValueError, KeyError):
+                    pass
 
     def _on_delete(self, widget, event) -> bool:
         self._quit()
