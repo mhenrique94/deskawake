@@ -984,11 +984,11 @@ instalador virou E7 e o empacotamento virou E8.
 
 | Arquivo | Responsabilidade |
 |---|---|
-| `ui_gtk/widget.py` | A1 (`_NET_SHOWING_DESKTOP`), tooltip estruturado, ciclo do `last_error`, retry de assinatura D-Bus, acessibilidade, item `Sobre` e `Gtk.AboutDialog` |
+| `ui_gtk/widget.py` | A1 com fallback documentado, tooltip estruturado, ciclo do `last_error`, retry de assinatura D-Bus, acessibilidade, item `Sobre` e `Gtk.AboutDialog` (autor/empresa no corpo, link do repositório, sem botão Créditos) |
 | `ui_gtk/theme.py` | knob `#20252B` fixo, hover/pressed/cursor e `format_error_tooltip` puro |
 | `core/__init__.py` | `__version__ = "0.1.0"` (fonte única) |
 | `tests/unit/test_version.py` | sincronia `core.__version__` × `pyproject.toml` × `plasmoid/metadata.json` |
-| `tests/unit/test_theme.py` / `test_ui_assets.py` | tokens, tooltip, menu `Sobre`, ausência de `DESKTOP` |
+| `tests/unit/test_theme.py` / `test_ui_assets.py` | tokens, tooltip, menu `Sobre`, ausência de `DESKTOP` e do observador de A1 |
 | `spec.md` / docs | emendas das decisões 8, 14, 16, 19 e 34–38 |
 
 **Diferenças intencionais que permanecem:** 124×42 fixo, menu completo (`Tema ▸`, autostart,
@@ -1012,9 +1012,9 @@ O GTK é a UI do MATE; o Plasmoid continua a referência de qualidade visual, n�
 
 1. **Paridade não é cópia:** não adicionar resize, hamburguer, sombra ou chip de wallpaper ao GTK;
    o contrato GTK continua 124×42 e menu completo.
-2. **A1 com guarda:** observar `_NET_SHOWING_DESKTOP` e reexibir **uma vez** por transição; se o WM
-   reocultar, houver flicker ou o arrasto quebrar, remover o observador e documentar a limitação.
-   **Nunca** usar `WindowTypeHint.DESKTOP`.
+2. **A1 com fallback:** o spike de 21/11/2026 mostrou que o Marco reoculta o widget e que
+   `present()` cancela o modo “mostrar área de trabalho”; o observador foi removido e a limitação
+   será documentada no README (E7). **Nunca** usar `WindowTypeHint.DESKTOP`.
 3. **Knob fixo:** `#20252B` nas duas variantes; o trilho mantém as cores de estado.
 4. **Tooltip escapado:** `set_tooltip_markup` + `GLib.markup_escape_text`; nunca interpolar o erro
    cru em markup.
@@ -1026,8 +1026,8 @@ O GTK é a UI do MATE; o Plasmoid continua a referência de qualidade visual, n�
    foco de teclado.
 8. **A6 com mouse real:** XTest não é prova; se o submenu `Tema` fechar, investigar o consumo de
    `button-release` pelo arrasto.
-9. **About sem ©/CNPJ:** o símbolo © e a linha legal ficam no `LICENSE`; o About mostra autor, site
-   e MIT.
+9. **About sem ©/CNPJ:** o símbolo © e a linha legal ficam no `LICENSE`; o About mostra
+   autor/empresa e licença MIT no corpo e os links do repositório e do site, sem botão “Créditos”.
 10. **Versão única:** `core.__version__` é a fonte; o teste de sincronia falha se
     `pyproject.toml`/`metadata.json` divergirem.
 11. **KDE intocado:** nenhum QML; mudanças em `metadata.json`/`assets/` são da E7 e passam por
@@ -1046,20 +1046,21 @@ python3 -m pytest tests/unit/test_version.py tests/unit/test_theme.py tests/unit
 - [ ] Baseline preservado (267 unit + 34 integração/1 skip) sem regressões.
 - [ ] Sincronia de versão verde.
 - [ ] Tokens do knob/hover e `format_error_tooltip` cobertos.
-- [ ] Menu com `Sobre`, ausência de `WindowTypeHint.DESKTOP`, presença de `_NET_SHOWING_DESKTOP`,
-      `pointer`, `get_accessible().set_name` e `markup_escape_text`.
+- [ ] Menu com `Sobre`, ausência de `WindowTypeHint.DESKTOP` e do observador de A1, `pointer`,
+      `get_accessible().set_name` e `markup_escape_text`.
 - [ ] Nenhum teste de GUI; nenhuma dependência nova.
 
 **Manual — Mint 22.3 MATE/X11 (obrigatório)**
 
 - [ ] 124×42, canto superior direito, 24 px, sem decoração; fora de `Alt+Tab`/barra/pager; todos os
       workspaces.
-- [ ] **A1:** Ctrl+Alt+D mantém o widget visível e clicável; se o fallback for acionado, a limitação
-      está documentada.
+- [ ] **A1:** Ctrl+Alt+D esconde o widget e restaurar o traz de volta; limitação documentada no
+      README (E7).
 - [ ] Arrasto de qualquer ponto; clique no toggle alterna; knob legível no tema claro/escuro.
 - [ ] Hover/pressed e cursor `pointer`; spinner na chamada; compositor sólido/translúcido.
 - [ ] Menu: `Ativar/Desativar`, `Tema ▸`, `Iniciar com o sistema`, `Sobre o DeskAwake…`, `Sair`.
-- [ ] `Sobre`: `0.1.0`, `Marcelo Silva`, `manivasoftware.com.br`, MIT; sem ©/CNPJ.
+- [ ] `Sobre`: `0.1.0`, autor/empresa e licença MIT no corpo, links do repositório e do site; sem
+      botão “Créditos”, sem ©/CNPJ.
 - [ ] `Sair`/`kill -9` sem órfãos; idle/lock; tema `Mint-Y` ↔ `Mint-Y-Dark`; fallback de fonte.
 - [ ] `error` com tooltip e preservação do filho do `systemd-inhibit`; **A6** com mouse real;
       **A7** registrado no PR/README.

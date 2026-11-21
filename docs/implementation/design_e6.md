@@ -61,7 +61,7 @@ hamburguer, hover/pressed, tooltip estruturado, tipografia escalável). A E6 fec
 | 2 | Paridade | **Linguagem visual comum, não idêntica**: o GTK herda o nível de acabamento do KDE atual, mas mantém 124×42 fixo, menu completo e ausência de sampling de wallpaper. |
 | 3 | A1 | **Tentar corrigir** “mostrar área de trabalho” com observação de `_NET_SHOWING_DESKTOP`; se causar flicker, quebrar arrasto ou exigir hint proibido, **documentar a limitação** e remover o observador. |
 | 4 | Pacote | A1, knob (V10), hover/pressed/cursor (V12), tooltip (V13), `last_error` (F5), retry D-Bus (F6), acessibilidade parcial (F13), reteste do submenu `Tema` (A6), correção documental 10×12 px (V2), `Sobre`/créditos e checklist MATE. |
-| 5 | Créditos | `Gtk.AboutDialog` no GTK (E6); `metadata.json` com `Authors`/`Website`/`Copyright` (linha legal sem ©) na E7; `LICENSE` com razão social + CNPJ na E7; README com a linha legal na E7. |
+| 5 | Créditos | `Gtk.AboutDialog` no GTK com autor/empresa e licença no corpo e links para o repositório e o site (E6; sem botão Créditos); `metadata.json` com `Authors`/`Website`/`Copyright` (linha legal sem ©) na E7; `LICENSE` com razão social + CNPJ na E7; README com a linha legal na E7. |
 | 6 | Versão | Semver **0.1.0**, fonte única em `core/__init__.py`, sincronia testada com `pyproject.toml` e `metadata.json`. |
 | 7 | KDE intocado | Nenhuma mudança de QML. Alterações em arquivos compartilhados (`metadata.json`, `assets/`) são aditivas e passam pelos testes do Plasmoid. |
 | 8 | Spec | Emendar a `spec.md` em vez de congelá-la; decisões 34–38 registram créditos, versão, paridade e a nova divisão. |
@@ -87,7 +87,7 @@ hamburguer, hover/pressed, tooltip estruturado, tipografia escalável). A E6 fec
 
 | # | Achado | Tratamento na E6 |
 |---|---|---|
-| A1 | Ctrl+Alt+D adiciona `_NET_WM_STATE_HIDDEN`; o widget some e volta ao restaurar. | **Corrigir** com observação de `_NET_SHOWING_DESKTOP`; fallback documentado (§3.1). |
+| A1 | Ctrl+Alt+D adiciona `_NET_WM_STATE_HIDDEN`; o widget some e volta ao restaurar. | **Tentado** com observação de `_NET_SHOWING_DESKTOP`; fallback acionado no spike (§3.1). |
 | A2 | `error` por queda de backend preserva o filho do `systemd-inhibit` e libera o inibidor de tela. | **Documentação/verificação** na E7 e na spec (já corrigida); a E6 só mantém o comportamento. |
 | A3 | `IsInhibited(8)` não existe no mate-screensaver 1.26.2. | **E7** (`verify.sh` usa `GetInhibitors` + `mate-screensaver-command -q`); docs/spec já corrigidos. |
 | A4 | `gtk-application-prefer-dark-theme` não existe em `org.mate.interface`. | **E7** (README); o código já lê `Gtk.Settings` sem depender do schema. |
@@ -121,8 +121,9 @@ hamburguer, hover/pressed, tooltip estruturado, tipografia escalável). A E6 fec
   - `tests/unit/test_version.py`: regex de semver + sincronia com `pyproject.toml` e
     `plasmoid/metadata.json`.
   - `tests/unit/test_theme.py`: tokens e formatação pura.
-  - `tests/unit/test_ui_assets.py`: menu com `Sobre`, ausência de `WindowTypeHint.DESKTOP`, presença
-    de `_NET_SHOWING_DESKTOP`, `pointer`, `get_accessible().set_name` e `markup_escape_text`.
+  - `tests/unit/test_ui_assets.py`: menu com `Sobre`, ausência de `WindowTypeHint.DESKTOP` e do
+    observador de `_NET_SHOWING_DESKTOP` (fallback), presença de `pointer`,
+    `get_accessible().set_name` e `markup_escape_text`.
 
 ### 2.2 Fluxo do menu
 
@@ -163,6 +164,12 @@ clique direito / (futuro botão) → Menu
 continuam funcionando; sem flicker perceptível; comportamento igual com compositor ligado/desligado.
 **Fallback:** se o WM reocultar, houver flicker ou o arrasto quebrar, remover o observador e
 documentar a limitação no README (E7) e na spec; **nunca** trocar para `WindowTypeHint.DESKTOP`.
+
+**Resultado do spike (Mint 22.3 MATE, 21/11/2026): fallback acionado.** Com Ctrl+Alt+D
+(`wmctrl -k on`), o Marco define `WM_STATE=Iconic` e `_NET_WM_STATE_HIDDEN` no widget.
+`deiconify()`/`gdk_window.show()` são ignorados enquanto `_NET_SHOWING_DESKTOP=1`; `present()`
+reexibe o widget, mas zera `_NET_SHOWING_DESKTOP` e restaura **todas** as janelas. O observador
+foi removido; o widget permanece `UTILITY` e a limitação vai para o README da E7.
 
 ### 3.2 Knob do toggle (V10)
 
@@ -235,10 +242,14 @@ implementação usam **10 px semibold**. A E6 emenda a spec para 10 px e registr
 - `Gtk.AboutDialog` com:
   - `program_name = "DeskAwake"`;
   - `version = core.__version__` (`0.1.0`);
-  - `comments = "Mantém a tela e o sistema acordados quando ativado."`;
-  - `website = "https://manivasoftware.com.br"`, `website_label = "manivasoftware.com.br"`;
-  - `license_type = Gtk.License.MIT_X11`, `wrap_license = True`;
-  - `authors = ["Marcelo Silva"]`;
+  - `comments =` descrição + “Desenvolvido por Marcelo Silva · Maniva Software.” +
+    “Licença MIT.”, tudo no corpo;
+  - `website = "https://github.com/mhenrique94/deskawake"`,
+    `website_label = "Repositório no GitHub"`;
+  - `Gtk.LinkButton` no corpo para `https://manivasoftware.com.br`
+    (label `manivasoftware.com.br`);
+  - **sem** `authors` (o GTK criaria o botão “Créditos”) e **sem** `license_type`/`wrap_license`
+    (o GTK criaria o botão “Licença”; a licença fica no corpo);
   - logo: tentar `assets/deskawake.svg` via `GdkPixbuf.Pixbuf.new_from_file_at_scale`; se falhar,
     usar o ícone do tema (`preferences-system-power-management`) ou nenhum logo.
   - **Sem** campo de copyright e **sem** CNPJ (decisão 5: © só no LICENSE).
@@ -317,7 +328,8 @@ Ordem exata: `Ativar/Desativar` · `Tema ▸` · `Iniciar com o sistema` · `Sob
 ### ADR-04: Créditos nativos, sem poluir a pílula
 
 - **Contexto:** 124×42 não comporta texto de crédito; o Plasma já tem um “Sobre” nativo.
-- **Decisão:** GTK usa `Gtk.AboutDialog`; o Plasmoid usa `metadata.json` (E7). A pílula não muda.
+- **Decisão:** GTK usa `Gtk.AboutDialog` com autor/empresa e licença no corpo e os links do
+  repositório e do site; sem botão “Créditos”. O Plasmoid usa `metadata.json` (E7). A pílula não muda.
 - **Consequências:** créditos acessíveis sem alterar layout; a E7 mantém a linha legal no LICENSE e
   no README.
 
@@ -412,8 +424,9 @@ python3 -m pytest tests/unit/test_version.py tests/unit/test_theme.py tests/unit
 - [ ] Baseline preservado: **267 unit + 34 integração (1 skip)** ou mais, sem regressões.
 - [ ] `test_version.py` verde: `core.__version__ == pyproject.toml == metadata.json`.
 - [ ] `test_theme.py` verde: knob fixo, hover/pressed, `format_error_tooltip` e escape.
-- [ ] `test_ui_assets.py` verde: menu com `Sobre`, ausência de `WindowTypeHint.DESKTOP`, presença de
-      `_NET_SHOWING_DESKTOP`, `pointer`, `get_accessible().set_name` e `markup_escape_text`.
+- [ ] `test_ui_assets.py` verde: menu com `Sobre`, ausência de `WindowTypeHint.DESKTOP` e do
+      observador de `_NET_SHOWING_DESKTOP` (fallback), presença de `pointer`,
+      `get_accessible().set_name` e `markup_escape_text`.
 - [ ] Nenhum teste de GUI; nenhuma dependência nova.
 
 ### 9.2 Manual — Mint 22.3 MATE/X11 (obrigatório; fecha A1–A7)
@@ -421,8 +434,9 @@ python3 -m pytest tests/unit/test_version.py tests/unit/test_theme.py tests/unit
 1. `./bin/deskawake ui` (com o daemon da E2) ou o autostart; conferir 124×42, canto superior direito,
    24 px, sem decoração.
 2. `Alt+Tab`/barra/pager: widget fora; aparece em todos os workspaces (criar um segundo).
-3. **A1:** Ctrl+Alt+D ⇒ o widget permanece visível e clicável; restaurar ⇒ continua normal. Se o
-   fallback for acionado, registrar a limitação no README da E7.
+3. **A1:** Ctrl+Alt+D ⇒ o widget some e volta ao restaurar; o fallback da E6 foi acionado
+   (spike 21/11/2026: o Marco reoculta e `present()` cancela o modo), então registrar a limitação
+   no README da E7.
 4. Arrasto de qualquer ponto, inclusive sobre o toggle; > 5 px não alterna.
 5. Clique no toggle alterna; clique fora não altera; knob escuro legível no tema claro e no escuro.
 6. Hover/pressed no toggle e cursor `pointer`; sem animação contínua.
@@ -450,7 +464,7 @@ python3 -m pytest tests/unit/test_version.py tests/unit/test_theme.py tests/unit
 
 | Risco | Onde fecha |
 |---|---|
-| A1 reexibe e o WM reoculta em loop | Guarda de uma tentativa por transição + fallback documentado; checklist MATE |
+| A1 reexibe e o WM reoculta em loop | Spike 21/11/2026: o Marco reoculta e `present()` cancela o modo; observador removido e limitação no README (E7) |
 | `deiconify()` furtar foco ou quebrar arrasto | `set_accept_focus(False)` + teste manual; remover observador se quebrar |
 | Logo SVG no About falhar em alguns temas | Fallback para ícone do tema ou sem logo |
 | Acessibilidade sem teste automatizado | Verificação manual com leitor de tela, se disponível; nomes estáticos testados |
