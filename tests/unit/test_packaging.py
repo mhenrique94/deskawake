@@ -192,3 +192,89 @@ def test_build_artifacts_names():
     assert "deskawake-${VERSION}.tar.gz" in source
     assert "SHA256SUMS" in source
 
+
+# --- Smoke test em container --------------------------------------------------
+
+
+def test_test_deb_contract():
+    result = _bash_syntax(PACKAGING / "test-deb.sh")
+
+    assert result.returncode == 0, result.stderr
+
+    source = _text(PACKAGING / "test-deb.sh")
+    for token in (
+        "ubuntu:24.04",
+        "/pkg",
+        "apt-get install",
+        "--no-install-recommends",
+        "procps",
+        "deskawake status",
+        "apt-get remove",
+        "__pycache__",
+        "tests/",
+        "docs",
+        "docker",
+        "podman",
+    ):
+        assert token in source
+
+
+# --- Coexistência com a instalação per-user -----------------------------------
+
+
+def _assert_system_package_detection(source: str) -> None:
+    assert "system_package_installed()" in source
+    assert "dpkg-query -W -f='${Status}'" in source
+    assert "install ok installed" in source
+    assert "/usr/lib/deskawake" in source
+    assert "apt remove deskawake" in source
+
+
+def test_install_script_refuses_system_package():
+    source = _repo_text("install.sh")
+
+    _assert_system_package_detection(source)
+    assert "/usr/bin/deskawake" in source
+
+    calls = [
+        match.start()
+        for match in re.finditer(r"(?m)^\s*refuse_system_package\s*$", source)
+    ]
+    assert calls, "a checagem do pacote system-wide não é chamada"
+    assert calls[0] < source.index('desktop="${XDG_CURRENT_DESKTOP:-}"')
+    assert re.search(r"\b(sudo|pkexec|su)\b", source) is None
+
+
+def test_uninstall_script_warns_system_package():
+    source = _repo_text("uninstall.sh")
+
+    _assert_system_package_detection(source)
+    assert "não é removido por este script" in source
+    assert "rm -rf -- /usr" not in source
+    assert "rm -rf /usr" not in source
+    assert "apt-get" not in source
+    assert re.search(r"\b(sudo|pkexec|su)\b", source) is None
+
+
+def test_verify_script_system_fallback():
+    source = _repo_text("verify.sh")
+
+    assert "/usr/bin/deskawake" in source
+    assert "/usr/share/dbus-1/services/org.local.DeskAwake.service" in source
+
+    launcher = source.index('"$LAUNCHER"')
+    share = source.index('"$SHARE/bin/deskawake"')
+    system = source.index('"/usr/bin/deskawake"')
+    assert launcher < share < system
+
+    user_service = source.index('"$SERVICE"')
+    system_service = source.index(
+        '"/usr/share/dbus-1/services/org.local.DeskAwake.service"'
+    )
+    assert user_service < system_service
+
+    assert "instalações per-user e system-wide" in source
+
+    message = next(line for line in source.splitlines() if "não instalado" in line)
+    assert "./install.sh" in message
+    assert ".deb" in message

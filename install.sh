@@ -59,6 +59,18 @@ die_usage() {
     exit 2
 }
 
+system_package_installed() {
+    dpkg-query -W -f='${Status}' deskawake 2>/dev/null \
+        | grep -q 'install ok installed' \
+        || [[ -e /usr/lib/deskawake ]]
+}
+
+refuse_system_package() {
+    if system_package_installed; then
+        die "pacote deskawake instalado system-wide; remova com \"apt remove deskawake\" ou use /usr/bin/deskawake"
+    fi
+}
+
 cleanup() {
     local file
     for file in "${TEMP_FILES[@]}"; do
@@ -111,6 +123,10 @@ fi
 if [[ -n "${XDG_DATA_HOME:-}" && "$XDG_DATA_HOME" != /* ]]; then
     printf 'install.sh: XDG_DATA_HOME inválido; caminho absoluto obrigatório\n' >&2
     exit 2
+fi
+
+if [[ "$INSTALL_DEPS" -eq 0 ]]; then
+    refuse_system_package
 fi
 
 if [[ -z "$TARGET" && "$INSTALL_DEPS" -eq 0 ]]; then
@@ -348,6 +364,8 @@ if [[ -z "$TARGET" ]]; then
     fi
     exit 1
 fi
+
+refuse_system_package
 
 check_install_deps
 

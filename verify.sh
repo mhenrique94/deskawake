@@ -76,17 +76,51 @@ if [[ -n "${XDG_DATA_HOME:-}" && "$XDG_DATA_HOME" != /* ]]; then
     exit 2
 fi
 
-if [[ -x "$LAUNCHER" ]]; then
-    DESKAWAKE="$LAUNCHER"
-elif [[ -x "$SHARE/bin/deskawake" ]]; then
-    DESKAWAKE="$SHARE/bin/deskawake"
-else
-    fail "DeskAwake não instalado; rode ./install.sh"
+resolve_binary() {
+    local candidate
+
+    for candidate in "$LAUNCHER" "$SHARE/bin/deskawake" "/usr/bin/deskawake"; do
+        if [[ -x "$candidate" ]]; then
+            printf '%s' "$candidate"
+            return 0
+        fi
+    done
+    return 1
+}
+
+resolve_service() {
+    local candidate
+
+    for candidate in "$SERVICE" "/usr/share/dbus-1/services/org.local.DeskAwake.service"; do
+        if [[ -f "$candidate" ]]; then
+            printf '%s' "$candidate"
+            return 0
+        fi
+    done
+    return 1
+}
+
+warn_duplicate_installations() {
+    local has_user=0
+    local has_system=0
+
+    if [[ -x "$LAUNCHER" || -x "$SHARE/bin/deskawake" ]]; then
+        has_user=1
+    fi
+    if [[ -x "/usr/bin/deskawake" ]]; then
+        has_system=1
+    fi
+    if ((has_user && has_system)); then
+        warn "instalações per-user e system-wide detectadas; a per-user tem precedência no PATH"
+    fi
+}
+
+DESKAWAKE="$(resolve_binary || true)"
+if [[ -z "$DESKAWAKE" ]] || [[ ! -f "$(resolve_service || true)" ]]; then
+    fail "DeskAwake não instalado; rode ./install.sh ou instale o .deb de um release"
 fi
 
-if [[ ! -f "$SERVICE" ]]; then
-    fail "DeskAwake não instalado; rode ./install.sh"
-fi
+warn_duplicate_installations
 
 for tool in gdbus systemd-inhibit; do
     if ! command -v "$tool" >/dev/null 2>&1; then

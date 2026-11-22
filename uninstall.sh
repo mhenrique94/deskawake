@@ -44,6 +44,12 @@ die_usage() {
     exit 2
 }
 
+system_package_installed() {
+    dpkg-query -W -f='${Status}' deskawake 2>/dev/null \
+        | grep -q 'install ok installed' \
+        || [[ -e /usr/lib/deskawake ]]
+}
+
 while (($#)); do
     case "$1" in
         --purge)
@@ -68,6 +74,10 @@ fi
 if [[ -n "${XDG_DATA_HOME:-}" && "$XDG_DATA_HOME" != /* ]]; then
     printf 'uninstall.sh: XDG_DATA_HOME inválido; caminho absoluto obrigatório\n' >&2
     exit 2
+fi
+
+if system_package_installed; then
+    warn "pacote deskawake instalado system-wide; ele não é removido por este script (use \"apt remove deskawake\")"
 fi
 
 name_has_owner() {
