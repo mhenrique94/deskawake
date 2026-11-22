@@ -15,6 +15,7 @@ DAEMON_NAME="org.local.DeskAwake"
 UI_NAME="org.local.DeskAwake.Ui"
 DAEMON_OBJECT="/org/local/DeskAwake"
 PURGE=0
+PLASMOID_FAILED=0
 GDBUS_BIN="$(command -v gdbus 2>/dev/null || true)"
 
 usage() {
@@ -156,13 +157,13 @@ remove_plasmoid() {
                 >/dev/null 2>&1 || true
         fi
         if [[ -d "$PLASMOID_DIR" ]]; then
-            rm -rf -- "$PLASMOID_DIR"
+            rm -rf -- "$PLASMOID_DIR" 2>/dev/null || true
         fi
     fi
 
     if [[ -d "$PLASMOID_DIR" ]]; then
         warn "não foi possível remover o Plasmoid em \"$PLASMOID_DIR\""
-        exit 1
+        PLASMOID_FAILED=1
     fi
 }
 
@@ -186,9 +187,15 @@ if command -v systemd-inhibit >/dev/null 2>&1 \
     warn "ainda há inibição do DeskAwake; inspecione com: systemd-inhibit --list"
 fi
 
-log "desinstalação concluída"
 if ((PURGE)); then
     log "configuração removida: \"$CONFIG_DIR\""
 else
     log "configuração preservada: \"$CONFIG_DIR\" (use --purge para remover)"
 fi
+
+if ((PLASMOID_FAILED)); then
+    warn "remoção do Plasmoid falhou; os demais arquivos foram removidos"
+    exit 1
+fi
+
+log "desinstalação concluída"

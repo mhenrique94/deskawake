@@ -1,9 +1,11 @@
-"""Smoke tests de ``install.sh`` e ``uninstall.sh`` em ``HOME`` isolado.
+"""Smoke tests de ``install.sh``, ``uninstall.sh`` e ``verify.sh``.
 
 Nenhum daemon, GUI ou sessão D-Bus real é usado: ``HOME``, ``XDG_DATA_HOME`` e
 ``PATH`` apontam para ``tmp_path`` e ``kpackagetool6``/``gdbus`` são scripts
-falsos que registram as chamadas. ``verify.sh`` não é executado aqui; seu
-contrato é estático e a validação real é manual.
+falsos que registram as chamadas. ``verify.sh`` é executado apenas com
+``deskawake``, ``gdbus``, ``systemd-inhibit`` e ``mate-screensaver-command``
+falsos, para cobrir o caminho de falha de consulta no OFF; a validação real
+continua manual.
 """
 
 from __future__ import annotations
@@ -280,6 +282,91 @@ def test_sandbox_is_isolated(sandbox: Sandbox):
         fake = sandbox.bin / name
         assert fake.is_file()
         assert os.access(fake, os.X_OK)
+
+
+def _install_verify_fakes(sandbox: Sandbox) -> None:
+    state = sandbox.root / "verify-state"
+    deskawake = sandbox.share / "bin" / "deskawake"
+    deskawake.parent.mkdir(parents=True, exist_ok=True)
+    _write_executable(
+        deskawake,
+        f"""\
+        #!/bin/sh
+        state="{state}"
+        case "$1" in
+            on)
+                printf on >"$state"
+                printf 'on\\n'
+                ;;
+            off)
+                printf off >"$state"
+                printf 'off\\n'
+                ;;
+            status)
+                if [ "$(cat "$state" 2>/dev/null)" = "on" ]; then
+                    printf 'on\\n'
+                    exit 0
+                fi
+                printf 'off\\n'
+                exit 1
+                ;;
+        esac
+        """,
+    )
+
+    service = sandbox.service
+    service.parent.mkdir(parents=True, exist_ok=True)
+    service.write_text(
+        "[D-BUS Service]\nName=org.local.DeskAwake\nExec=/bin/true\n",
+        encoding="utf-8",
+    )
+
+    _write_executable(
+        sandbox.bin / "gdbus",
+        f"""\
+        #!/bin/sh
+        if [ "$(cat "{state}" 2>/dev/null)" = "on" ]; then
+            printf '%s\\n' '(["Application=deskawake; Since=0; Reason=DeskAwake active;"],)'
+            exit 0
+        fi
+        exit 1
+        """,
+    )
+    _write_executable(
+        sandbox.bin / "systemd-inhibit",
+        f"""\
+        #!/bin/sh
+        if [ "$1" = "--list" ] && [ "$(cat "{state}" 2>/dev/null)" = "on" ]; then
+            printf '%s\\n' 'DeskAwake ... DeskAwake active ... block'
+        fi
+        exit 0
+        """,
+    )
+    _write_executable(
+        sandbox.bin / "mate-screensaver-command",
+        f"""\
+        #!/bin/sh
+        if [ "$(cat "{state}" 2>/dev/null)" = "on" ]; then
+            printf '%s\\n' 'The screensaver is being inhibited by:' 'Application=deskawake; Reason=DeskAwake active;'
+        else
+            printf '%s\\n' 'The screensaver is not inhibited'
+        fi
+        """,
+    )
+
+
+def test_verify_reports_failure_when_off_query_fails(sandbox: Sandbox):
+    _install_verify_fakes(sandbox)
+
+    result = sandbox.run(
+        "verify.sh",
+        env_extra={"XDG_CURRENT_DESKTOP": "MATE"},
+    )
+
+    assert result.returncode == 1, result.stdout + result.stderr
+    assert "[ok] GetInhibitors contém deskawake" in result.stdout
+    assert "[falha] GetInhibitors inacessível após o OFF" in result.stdout
+    assert "[ok] GetInhibitors liberou deskawake" not in result.stdout
 
 
 # --- install.sh ---------------------------------------------------------------
@@ -828,6 +915,32 @@ def test_uninstall_removes_plasmoid_without_tool(sandbox: Sandbox):
 
     assert result.returncode == 0, result.stderr
     assert not sandbox.plasmoid.exists()
+
+
+@pytest.mark.skipif(os.geteuid() == 0, reason="root ignora permissões de diretório")
+def test_uninstall_continues_after_plasmoid_failure(sandbox: Sandbox):
+    assert sandbox.run("install.sh", "--only-mate").returncode == 0
+    sandbox.plasmoid.mkdir(parents=True)
+    (sandbox.plasmoid / "metadata.json").write_text("{}", encoding="utf-8")
+
+    parent = sandbox.plasmoid.parent
+    parent.chmod(0o555)
+    try:
+        result = sandbox.run(
+            "uninstall.sh",
+            env_extra={"KPKG_TOOL": "__missing__"},
+        )
+    finally:
+        parent.chmod(0o755)
+        shutil.rmtree(sandbox.plasmoid, ignore_errors=True)
+
+    assert result.returncode == 1
+    assert "não foi possível remover o Plasmoid" in result.stdout
+    assert "remoção do Plasmoid falhou" in result.stdout
+    assert not sandbox.share.exists()
+    assert not sandbox.launcher.exists()
+    assert not sandbox.service.exists()
+    assert not (sandbox.autostart / "deskawake-daemon.desktop").exists()
 
 
 def test_uninstall_rejects_unknown_flag(sandbox: Sandbox):

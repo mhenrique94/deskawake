@@ -124,7 +124,7 @@ mate_get_inhibitors() {
         --dest org.mate.ScreenSaver \
         --object-path /org/mate/ScreenSaver \
         --method org.mate.ScreenSaver.GetInhibitors \
-        2>/dev/null || true
+        2>/dev/null
 }
 
 kde_active_inhibitions() {
@@ -134,7 +134,7 @@ kde_active_inhibitions() {
         --method org.freedesktop.DBus.Properties.Get \
         org.kde.Solid.PowerManagement.PolicyAgent \
         ActiveInhibitions \
-        2>/dev/null || true
+        2>/dev/null
 }
 
 kde_has_inhibition() {
@@ -148,25 +148,31 @@ kde_has_inhibition() {
 check_mate_on() {
     local output=""
     local attempt
+    local found=0
 
     for ((attempt = 0; attempt < MATE_POLL_SECONDS * 10; attempt++)); do
-        output="$(mate_get_inhibitors)"
-        if printf '%s' "$output" | grep -qi 'deskawake'; then
-            break
+        if output="$(mate_get_inhibitors)"; then
+            if printf '%s' "$output" | grep -qi 'deskawake'; then
+                found=1
+                break
+            fi
         fi
         sleep 0.1
     done
 
-    if printf '%s' "$output" | grep -qi 'deskawake'; then
+    if ((found)); then
         check_ok "GetInhibitors contém deskawake"
     else
         check_fail "GetInhibitors contém deskawake"
     fi
 
     if command -v mate-screensaver-command >/dev/null 2>&1; then
-        output="$(mate-screensaver-command -q 2>/dev/null || true)"
-        if printf '%s' "$output" | grep -qiE 'deskawake|inibida'; then
-            check_ok "mate-screensaver-command -q lista o DeskAwake"
+        if output="$(mate-screensaver-command -q 2>/dev/null)"; then
+            if printf '%s' "$output" | grep -qiE 'deskawake|inibida'; then
+                check_ok "mate-screensaver-command -q lista o DeskAwake"
+            else
+                check_fail "mate-screensaver-command -q lista o DeskAwake"
+            fi
         else
             check_fail "mate-screensaver-command -q lista o DeskAwake"
         fi
@@ -176,27 +182,37 @@ check_mate_on() {
 check_mate_off() {
     local output=""
     local attempt
+    local queried=0
+    local released=0
 
     for ((attempt = 0; attempt < MATE_POLL_SECONDS * 10; attempt++)); do
-        output="$(mate_get_inhibitors)"
-        if ! printf '%s' "$output" | grep -qi 'deskawake'; then
-            break
+        if output="$(mate_get_inhibitors)"; then
+            queried=1
+            if ! printf '%s' "$output" | grep -qi 'deskawake'; then
+                released=1
+                break
+            fi
         fi
         sleep 0.1
     done
 
-    if printf '%s' "$output" | grep -qi 'deskawake'; then
+    if ((released)); then
+        check_ok "GetInhibitors liberou deskawake"
+    elif ((queried)); then
         check_fail "GetInhibitors liberou deskawake"
     else
-        check_ok "GetInhibitors liberou deskawake"
+        check_fail "GetInhibitors inacessível após o OFF"
     fi
 
     if command -v mate-screensaver-command >/dev/null 2>&1; then
-        output="$(mate-screensaver-command -q 2>/dev/null || true)"
-        if printf '%s' "$output" | grep -qi 'deskawake'; then
-            check_fail "mate-screensaver-command -q sem deskawake"
+        if output="$(mate-screensaver-command -q 2>/dev/null)"; then
+            if printf '%s' "$output" | grep -qi 'deskawake'; then
+                check_fail "mate-screensaver-command -q sem deskawake"
+            else
+                check_ok "mate-screensaver-command -q sem deskawake"
+            fi
         else
-            check_ok "mate-screensaver-command -q sem deskawake"
+            check_fail "mate-screensaver-command -q acessível após o OFF"
         fi
     fi
 }
@@ -204,18 +220,20 @@ check_mate_off() {
 check_kde_on() {
     local output=""
     local attempt
+    local found=0
 
     for ((attempt = 0; attempt < KDE_POLL_SECONDS * 10; attempt++)); do
-        output="$(kde_active_inhibitions)"
-        if printf '%s' "$output" | grep -qi 'deskawake' \
-            && printf '%s' "$output" | grep -qi 'DeskAwake active'; then
-            break
+        if output="$(kde_active_inhibitions)"; then
+            if printf '%s' "$output" | grep -qi 'deskawake' \
+                && printf '%s' "$output" | grep -qi 'DeskAwake active'; then
+                found=1
+                break
+            fi
         fi
         sleep 0.1
     done
 
-    if printf '%s' "$output" | grep -qi 'deskawake' \
-        && printf '%s' "$output" | grep -qi 'DeskAwake active'; then
+    if ((found)); then
         check_ok "ActiveInhibitions contém deskawake / DeskAwake active"
     else
         check_fail "ActiveInhibitions contém deskawake / DeskAwake active"
@@ -232,19 +250,26 @@ check_kde_on() {
 check_kde_off() {
     local output=""
     local attempt
+    local queried=0
+    local released=0
 
     for ((attempt = 0; attempt < KDE_POLL_SECONDS * 10; attempt++)); do
-        output="$(kde_active_inhibitions)"
-        if ! printf '%s' "$output" | grep -qi 'deskawake'; then
-            break
+        if output="$(kde_active_inhibitions)"; then
+            queried=1
+            if ! printf '%s' "$output" | grep -qi 'deskawake'; then
+                released=1
+                break
+            fi
         fi
         sleep 0.1
     done
 
-    if printf '%s' "$output" | grep -qi 'deskawake'; then
+    if ((released)); then
+        check_ok "ActiveInhibitions liberou deskawake"
+    elif ((queried)); then
         check_fail "ActiveInhibitions liberou deskawake"
     else
-        check_ok "ActiveInhibitions liberou deskawake"
+        check_fail "ActiveInhibitions inacessível após o OFF"
     fi
 
     output="$(kde_has_inhibition)"
