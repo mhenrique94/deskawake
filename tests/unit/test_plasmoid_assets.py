@@ -493,6 +493,19 @@ def test_main_qml_watchers_precede_getstate():
     )
 
 
+def test_main_qml_sync_does_not_cancel_pending_call():
+    """A ativação D-Bus registra o serviço antes da resposta do SetActive.
+
+    O sync disparado por ``registeredChanged`` não pode invalidar a chamada em
+    voo: incrementar ``callToken`` faria o callback do SetActive ser descartado
+    e ``callPending`` ficaria preso no spinner do primeiro toggle.
+    """
+    body = _function_body(_qml(), "syncFromDaemon")
+
+    assert "root.callPending" in body
+    assert "callToken += 1" not in body
+
+
 def test_preview_png_is_valid():
     data = PREVIEW.read_bytes()
 
