@@ -723,7 +723,13 @@ PlasmoidItem {
             return
         }
 
-        root.callToken += 1
+        // A ativação D-Bus registra o serviço antes de a resposta do SetActive
+        // chegar. Não invalidar a chamada em voo: o token descartaria o
+        // callback e o spinner do primeiro toggle ficaria preso.
+        if (root.callPending) {
+            return
+        }
+
         const token = root.callToken
 
         DBus.SessionBus.asyncCall({
