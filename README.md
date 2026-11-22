@@ -136,6 +136,7 @@ Outros recursos:
 - **Idle no MATE:** o `idle-delay` é lido no login; testar um intervalo curto exige uma sessão nova. O `lock-enabled` é destrutivo/opcional.
 - **`CanSuspend`:** não reflete os inibidores do DeskAwake e não é usado como teste.
 - **Caminhos com espaços:** são suportados e citados nos arquivos gerados; caminhos com aspas ou quebras de linha não são suportados.
+- **Ambiente:** `HOME` e `XDG_DATA_HOME` precisam ser caminhos absolutos; valores vazios ou relativos são rejeitados com código 2, sem alterar arquivos.
 - **Pendências manuais:** logout, desconexão de monitor externo e bloqueio de tela ainda precisam ser exercitados manualmente.
 
 ## Desenvolvimento e testes

@@ -59,6 +59,16 @@ while (($#)); do
     shift
 done
 
+if [[ -z "${HOME:-}" || "$HOME" != /* ]]; then
+    printf 'uninstall.sh: HOME inválido; caminho absoluto obrigatório\n' >&2
+    exit 2
+fi
+
+if [[ -n "${XDG_DATA_HOME:-}" && "$XDG_DATA_HOME" != /* ]]; then
+    printf 'uninstall.sh: XDG_DATA_HOME inválido; caminho absoluto obrigatório\n' >&2
+    exit 2
+fi
+
 name_has_owner() {
     local name="$1"
     local output

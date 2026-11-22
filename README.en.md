@@ -136,6 +136,7 @@ Other resources:
 - **Idle on MATE:** `idle-delay` is read at login; testing a short interval requires a new session. `lock-enabled` is destructive/optional.
 - **`CanSuspend`:** does not reflect DeskAwake inhibitors and is not used as a test.
 - **Paths with spaces:** supported and quoted in generated files; paths with quotes or line breaks are not supported.
+- **Environment:** `HOME` and `XDG_DATA_HOME` must be absolute paths; empty or relative values are rejected with exit 2, without changing files.
 - **Manual pending items:** logout, external monitor disconnect and screen lock still need to be exercised manually.
 
 ## Development and tests

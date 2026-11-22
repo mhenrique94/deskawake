@@ -319,6 +319,14 @@ def test_verify_script_kde_reads_active_inhibitions_property():
     ) is None
 
 
+def test_scripts_require_absolute_home_and_xdg_data_home():
+    for script in ("install.sh", "uninstall.sh", "verify.sh"):
+        source = _script(script)
+        assert "caminho absoluto obrigatório" in source
+        assert '"$HOME" != /*' in source
+        assert '"$XDG_DATA_HOME" != /*' in source
+
+
 def test_verify_script_never_uses_forbidden():
     source = _script("verify.sh")
     assert "CanSuspend" not in source

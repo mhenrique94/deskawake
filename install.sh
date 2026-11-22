@@ -103,6 +103,16 @@ while (($#)); do
     shift
 done
 
+if [[ -z "${HOME:-}" || "$HOME" != /* ]]; then
+    printf 'install.sh: HOME inválido; caminho absoluto obrigatório\n' >&2
+    exit 2
+fi
+
+if [[ -n "${XDG_DATA_HOME:-}" && "$XDG_DATA_HOME" != /* ]]; then
+    printf 'install.sh: XDG_DATA_HOME inválido; caminho absoluto obrigatório\n' >&2
+    exit 2
+fi
+
 if [[ -z "$TARGET" && "$INSTALL_DEPS" -eq 0 ]]; then
     desktop="${XDG_CURRENT_DESKTOP:-}"
     # O Plasma expõe "KDE" ou "PLASMA" em XDG_CURRENT_DESKTOP.
@@ -264,13 +274,17 @@ render_template() {
 write_launcher() {
     local target="$BIN_DIR/deskawake"
     local tmp
+    local launcher_path
+    local escaped
 
     mkdir -p -- "$BIN_DIR"
     tmp="$(mktemp "${target}.XXXXXX")"
     TEMP_FILES+=("$tmp")
+    launcher_path="$SHARE/bin/deskawake"
+    escaped=${launcher_path//\'/\'\\\'\'}
     {
         printf '#!/bin/sh\n'
-        printf 'exec "%s" "$@"\n' "$SHARE/bin/deskawake"
+        printf "exec '%s' \"\$@\"\n" "$escaped"
     } >"$tmp"
     chmod 755 "$tmp"
     mv -- "$tmp" "$target"

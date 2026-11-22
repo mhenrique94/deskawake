@@ -184,13 +184,14 @@ class Sandbox:
         script: str,
         *args: str,
         env_extra: dict[str, str] | None = None,
+        cwd: Path | None = None,
     ) -> subprocess.CompletedProcess[str]:
         env = dict(self.env)
         if env_extra:
             env.update(env_extra)
         return subprocess.run(
             [str(REPO_ROOT / script), *args],
-            cwd=REPO_ROOT,
+            cwd=cwd or REPO_ROOT,
             env=env,
             text=True,
             capture_output=True,
@@ -497,6 +498,128 @@ def test_install_rejects_unknown_flag(sandbox: Sandbox):
     assert not sandbox.share.exists()
 
 
+def test_scripts_reject_relative_xdg_data_home(sandbox: Sandbox):
+    workdir = sandbox.root / "cwd"
+    workdir.mkdir()
+
+    for script in ("install.sh", "uninstall.sh", "verify.sh"):
+        result = sandbox.run(
+            script,
+            env_extra={"XDG_DATA_HOME": "relative"},
+            cwd=workdir,
+        )
+
+        assert result.returncode == 2, script
+        assert "XDG_DATA_HOME" in result.stderr
+        assert "caminho absoluto obrigatório" in result.stderr
+        assert list(workdir.iterdir()) == [], script
+
+
+def test_scripts_reject_invalid_home(sandbox: Sandbox):
+    workdir = sandbox.root / "cwd"
+    workdir.mkdir()
+
+    for script in ("install.sh", "uninstall.sh", "verify.sh"):
+        for home in ("", "relative"):
+            result = sandbox.run(
+                script,
+                env_extra={"HOME": home},
+                cwd=workdir,
+            )
+
+            assert result.returncode == 2, (script, home)
+            assert "HOME" in result.stderr
+            assert "caminho absoluto obrigatório" in result.stderr
+            assert list(workdir.iterdir()) == [], (script, home)
+
+            help_result = sandbox.run(
+                script,
+                "--help",
+                env_extra={"HOME": home},
+                cwd=workdir,
+            )
+            assert help_result.returncode == 0, (script, home)
+
+
+def test_installer_launcher_quotes_shell_specials(sandbox: Sandbox):
+    data = sandbox.root / "data$HOME`id`"
+    data.mkdir()
+
+    result = sandbox.run(
+        "install.sh",
+        "--only-kde",
+        env_extra={"XDG_DATA_HOME": str(data)},
+    )
+
+    assert result.returncode == 0, result.stderr
+    launcher = sandbox.launcher
+    text = launcher.read_text(encoding="utf-8")
+    assert "$HOME" in text
+    assert "`id`" in text
+
+    run = subprocess.run(
+        [str(launcher), "--help"],
+        cwd=sandbox.root,
+        env=dict(sandbox.env, XDG_DATA_HOME=str(data)),
+        text=True,
+        capture_output=True,
+        timeout=60,
+    )
+
+    assert run.returncode == 0, run.stderr
+    assert "usage: deskawake" in run.stdout
+
+
+def test_install_renders_paths_with_sed_specials(sandbox: Sandbox):
+    data = sandbox.root / "data&pipe|back\\slash"
+    data.mkdir()
+
+    result = sandbox.run(
+        "install.sh",
+        "--only-mate",
+        env_extra={"XDG_DATA_HOME": str(data)},
+    )
+
+    assert result.returncode == 0, result.stderr
+    exec_path = data / "deskawake" / "bin" / "deskawake"
+    service = (
+        data / "dbus-1" / "services" / "org.local.DeskAwake.service"
+    ).read_text(encoding="utf-8")
+    assert f"Exec={exec_path} daemon" in service
+    assert "@EXEC@" not in service
+
+
+def test_uninstall_does_not_follow_final_symlinks(sandbox: Sandbox):
+    assert sandbox.run("install.sh", "--only-mate").returncode == 0
+
+    canary = sandbox.root / "canary"
+    for name in ("share", "state", "config"):
+        (canary / name).mkdir(parents=True)
+        (canary / name / "keep.txt").write_text(name, encoding="utf-8")
+
+    shutil.rmtree(sandbox.share)
+    sandbox.share.symlink_to(canary / "share")
+
+    state_dir = sandbox.home / ".local" / "state" / "deskawake"
+    state_dir.mkdir(parents=True)
+    shutil.rmtree(state_dir)
+    state_dir.symlink_to(canary / "state")
+
+    config_dir = sandbox.home / ".config" / "deskawake"
+    config_dir.mkdir(parents=True)
+    shutil.rmtree(config_dir)
+    config_dir.symlink_to(canary / "config")
+
+    result = sandbox.run("uninstall.sh", "--purge")
+
+    assert result.returncode == 0, result.stderr
+    assert not sandbox.share.exists()
+    assert not state_dir.exists()
+    assert not config_dir.exists()
+    for name in ("share", "state", "config"):
+        assert (canary / name / "keep.txt").read_text(encoding="utf-8") == name
+
+
 def test_install_deps_output_has_no_sudo(sandbox: Sandbox):
     result = sandbox.run("install.sh", "--install-deps")
 
@@ -547,8 +670,8 @@ def test_install_handles_home_with_spaces(sandbox: Sandbox):
 
     assert result.returncode == 0, result.stderr
     share = data / "deskawake"
-    exec_path = f'"{share / "bin" / "deskawake"}"'
-
+    binary = share / "bin" / "deskawake"
+    exec_path = f'"{binary}"'
     service = (
         data / "dbus-1" / "services" / "org.local.DeskAwake.service"
     ).read_text(encoding="utf-8")
@@ -562,7 +685,7 @@ def test_install_handles_home_with_spaces(sandbox: Sandbox):
     launcher = (home / ".local" / "bin" / "deskawake").read_text(
         encoding="utf-8"
     )
-    assert f'exec {exec_path} "$@"' in launcher
+    assert f"exec '{binary}' \"$@\"" in launcher
 
 
 def test_install_all_plasmoid_failure_exits_1(sandbox: Sandbox):
