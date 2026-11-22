@@ -11,6 +11,8 @@ import re
 import subprocess
 from pathlib import Path
 
+import pytest
+
 import core
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -278,3 +280,71 @@ def test_verify_script_system_fallback():
     message = next(line for line in source.splitlines() if "não instalado" in line)
     assert "./install.sh" in message
     assert ".deb" in message
+
+
+# --- Workflow de release ------------------------------------------------------
+
+
+def test_workflow_contract():
+    source = _text(REPO_ROOT / ".github" / "workflows" / "release.yml")
+
+    for token in (
+        'tags: ["v*"]',
+        "workflow_dispatch",
+        "permissions:",
+        "contents: write",
+        "ubuntu-latest",
+        "fetch-depth: 0",
+        "packaging/build-deb.sh",
+        "packaging/test-deb.sh",
+        "sha256sum -c SHA256SUMS",
+        "gh release",
+        "upload-artifact",
+        "SHA256SUMS",
+        "RUNNER_TEMP",
+        "--notes-file",
+        "GITHUB_REF_NAME",
+        'test "$GITHUB_REF_NAME" = "v$VERSION"',
+        "dist/deskawake_${VERSION}_all.deb",
+        "dist/deskawake-${VERSION}.tar.gz",
+        "dist/SHA256SUMS",
+    ):
+        assert token in source
+
+    assert "gpg" not in source.lower()
+
+
+# --- READMEs ------------------------------------------------------------------
+
+
+@pytest.mark.parametrize("name", ("README.md", "README.en.md"))
+def test_readmes_document_deb(name):
+    source = _repo_text(name)
+
+    for token in (
+        ".deb",
+        "deskawake_0.1.0_all.deb",
+        "deskawake-0.1.0.tar.gz",
+        "SHA256SUMS",
+        "sha256sum -c",
+        "apt install",
+        "apt remove",
+    ):
+        assert token in source
+
+    if name == "README.md":
+        for token in (
+            "atualização é manual",
+            "coexist",
+            "remov",
+            "Rode `./uninstall.sh` antes de instalar o `.deb`",
+        ):
+            assert token in source
+    else:
+        for token in (
+            "Updating is manual",
+            "coexist",
+            "remove",
+            "run `./uninstall.sh` before installing the `.deb`",
+        ):
+            assert token in source

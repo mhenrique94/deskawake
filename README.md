@@ -85,6 +85,46 @@ Sem flag, o desktop é detectado por `XDG_CURRENT_DESKTOP`:
   deskawake on
   ```
 
+### Instalação via `.deb` (system-wide)
+
+Para instalar para todos os usuários, baixe o pacote do GitHub Releases e use o `apt` (recomendado, porque resolve as dependências):
+
+```bash
+sudo apt install ./deskawake_0.1.0_all.deb
+```
+
+`sudo dpkg -i ./deskawake_0.1.0_all.deb` funciona como fallback, mas não resolve dependências; nesse caso rode `sudo apt install -f` em seguida.
+
+O pacote instala o código em `/usr/lib/deskawake`, o comando em `/usr/bin/deskawake`, o `.service` do D-Bus, os autostarts em `/etc/xdg/autostart` e o Plasmoid em `/usr/share/plasma/plasmoids`. A configuração (`~/.config/deskawake`) e o estado (`~/.local/state/deskawake`) continuam por usuário e são preservados na remoção.
+
+Para remover:
+
+```bash
+sudo apt remove deskawake
+```
+
+### Atualização
+
+A atualização é manual: baixe o `.deb` da versão nova e instale por cima com `sudo apt install ./deskawake_<nova>_all.deb`. Não há auto-update nem repositório APT nesta versão. Como no `install.sh`, a versão anterior continua ativa até o próximo login ou até reiniciar o daemon.
+
+### Integridade
+
+O release publica o `.deb`, o código-fonte em `deskawake-0.1.0.tar.gz` e o `SHA256SUMS`. Baixe os três e confira no diretório dos downloads:
+
+```bash
+sha256sum -c SHA256SUMS
+```
+
+O HTTPS e o SHA-256 são a integridade desta rodada; não há assinatura GPG nem repositório APT.
+
+### Coexistência com a instalação per-user
+
+As duas instalações não devem coexistir. Rode `./uninstall.sh` antes de instalar o `.deb`.
+
+- Com o pacote system-wide presente, `./install.sh` recusa e pede `apt remove deskawake`.
+- `./uninstall.sh` apenas avisa que o pacote não é removido por ele; a remoção system-wide é feita pelo gerenciador de pacotes.
+- `./verify.sh` aceita as duas instalações e avisa se ambas existirem.
+
 ## Uso
 
 CLI:
@@ -127,7 +167,10 @@ Outros recursos:
 - **`kpackagetool6`:** ausente no Mint 22.3, então o alvo KDE é indisponível nessa distro.
 - **GTK no Wayland:** o widget GTK é bloqueado em Wayland; `--force` (ou `DESKAWAKE_FORCE_UI=1`) é apenas para depuração.
 - **`Configurar` do Plasmoid:** abre as configurações nativas do Plasma, mas sem categorias próprias.
-- **Upgrade:** o `install.sh` não interrompe o daemon em execução; a versão anterior continua ativa até o próximo login/reinício.
+- **Upgrade:** o `install.sh` não interrompe o daemon em execução; a versão anterior continua ativa até o próximo login/reinício. O mesmo vale para a atualização via `.deb`.
+- **Remoção com daemon ativo:** após `sudo apt remove deskawake`, um daemon já em execução continua até o logout, porque o pacote não mata processos de usuário. Saia e entre na sessão para encerrá-lo.
+- **Autostart system-wide:** para desativar em um usuário, crie `~/.config/autostart/deskawake-*.desktop` (por exemplo, `deskawake-daemon.desktop` e `deskawake-widget.desktop`) com `Hidden=true`.
+- **Plasmoid após remover:** o widget some no próximo login, quando o Plasma reescaneia os pacotes instalados.
 - **`verify.sh`:** sempre termina OFF; não deixe o script como forma de ativar o DeskAwake.
 - **MATE — “Mostrar área de trabalho”:** o Marco (Ctrl+Alt+D) pode ocultar o widget; ele volta ao restaurar. A limitação é conhecida e não trocamos o tipo de janela para evitar quebrar clique/arrasto.
 - **MATE — tema `auto`:** resolve o tema pelo nome (`*Dark*`), porque `gtk-application-prefer-dark-theme` não existe em `org.mate.interface` no Mint 22.3.

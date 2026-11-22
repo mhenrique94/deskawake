@@ -1,0 +1,65 @@
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Validar tag x versão
+        if: startsWith(github.ref, 'refs/tags/v')
+        run: |
+          VERSION=$(python3 -c 'import core; print(core.__version__)')
+          test "$GITHUB_REF_NAME" = "v$VERSION"
+      - name: Build (.deb, tarball, SHA256SUMS)
+        run: packaging/build-deb.sh
+      - name: Smoke test em ubuntu:24.04
+        run: packaging/test-deb.sh
+      - name: Checksums
+        run: cd dist && sha256sum -c SHA256SUMS
+      - name: Notas do release
+        if: startsWith(github.ref, 'refs/tags/v')
+        run: |
+          VERSION=$(python3 -c 'import core; print(core.__version__)')
+          {
+            echo "## DeskAwake $VERSION"
+            echo
+            echo "Instalação:"
+            echo
+            echo "    sudo apt install ./deskawake_${VERSION}_all.deb"
+            echo
+            echo "Verificação: sha256sum -c SHA256SUMS"
+          } > "$RUNNER_TEMP/release-notes.md"
+      - name: Publicar release
+        if: startsWith(github.ref, 'refs/tags/v')
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          VERSION=$(python3 -c 'import core; print(core.__version__)')
+          FILES=(
+            "dist/deskawake_${VERSION}_all.deb"
+            "dist/deskawake-${VERSION}.tar.gz"
+            "dist/SHA256SUMS"
+          )
+          if gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1; then
+            gh release upload "$GITHUB_REF_NAME" "${FILES[@]}" --clobber
+          else
+            gh release create "$GITHUB_REF_NAME" "${FILES[@]}" \
+              --title "DeskAwake $VERSION" \
+              --notes-file "$RUNNER_TEMP/release-notes.md"
+          fi
+      - name: Guardar artefatos do run manual
+        if: github.event_name == 'workflow_dispatch'
+        uses: actions/upload-artifact@v4
+        with:
+          name: deskawake-${{ github.sha }}
+          path: dist/
