@@ -7,7 +7,15 @@
     "Icon": "preferences-system-power-management",
     "Category": "System Information",
     "License": "MIT",
-    "Version": "0.1.0"
+    "Version": "0.1.0",
+    "Authors": [
+      {
+        "Name": "Marcelo Silva"
+      }
+    ],
+    "Website": "https://manivasoftware.com.br",
+    "BugReportUrl": "https://github.com/mhenrique94/deskawake/issues",
+    "Copyright": "Marcelo Silva, MANIVA SOFTWARE E TECNOLOGIA LTDA - CNPJ 66.739.634/0001-79"
   },
   "X-Plasma-API-Minimum-Version": "6.4"
 }

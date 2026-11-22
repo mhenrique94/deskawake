@@ -1,0 +1,8 @@
+[Desktop Entry]
+Type=Application
+Name=DeskAwake Daemon
+Comment=Mantém a tela e o sistema acordados quando ativado
+Exec=@EXEC@ daemon
+Terminal=false
+NoDisplay=true
+X-GNOME-Autostart-enabled=true
