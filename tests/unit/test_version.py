@@ -24,6 +24,16 @@ def _metadata_version() -> str:
     return metadata["KPlugin"]["Version"]
 
 
+def _changelog_version() -> str:
+    text = (REPO_ROOT / "packaging" / "debian" / "changelog").read_text(
+        encoding="utf-8"
+    )
+    first_line = text.splitlines()[0]
+    match = re.match(r"^deskawake \((\d+\.\d+\.\d+)\) ", first_line)
+    assert match is not None, "versão ausente no topo do changelog"
+    return match.group(1)
+
+
 def test_version_is_semver():
     assert isinstance(core.__version__, str)
     assert SEMVER.match(core.__version__)
@@ -35,6 +45,10 @@ def test_version_matches_pyproject():
 
 def test_version_matches_plasmoid_metadata():
     assert core.__version__ == _metadata_version()
+
+
+def test_version_matches_changelog():
+    assert core.__version__ == _changelog_version()
 
 
 def test_version_has_single_source_in_core_init():
