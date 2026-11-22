@@ -427,6 +427,7 @@ def test_metadata_credits():
 
     assert plugin["Authors"] == [{"Name": "Marcelo Silva"}]
     assert plugin["Website"] == "https://manivasoftware.com.br"
+    assert plugin["BugReportUrl"] == "https://github.com/mhenrique94/deskawake/issues"
     assert LEGAL_LINE in plugin["Copyright"]
     assert "©" not in source
 
