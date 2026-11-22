@@ -121,7 +121,9 @@ kde_active_inhibitions() {
     gdbus call --session \
         --dest org.kde.Solid.PowerManagement \
         --object-path /org/kde/Solid/PowerManagement/PolicyAgent \
-        --method org.kde.Solid.PowerManagement.PolicyAgent.ActiveInhibitions \
+        --method org.freedesktop.DBus.Properties.Get \
+        org.kde.Solid.PowerManagement.PolicyAgent \
+        ActiveInhibitions \
         2>/dev/null || true
 }
 

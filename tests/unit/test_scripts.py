@@ -310,6 +310,15 @@ def test_verify_script_kde_tokens():
     assert "KDE_POLL_SECONDS=8" in source
 
 
+def test_verify_script_kde_reads_active_inhibitions_property():
+    source = _script("verify.sh")
+    assert "org.freedesktop.DBus.Properties.Get" in source
+    assert re.search(
+        r"--method org\.kde\.Solid\.PowerManagement\.PolicyAgent\.ActiveInhibitions",
+        source,
+    ) is None
+
+
 def test_verify_script_never_uses_forbidden():
     source = _script("verify.sh")
     assert "CanSuspend" not in source
