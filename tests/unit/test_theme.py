@@ -68,6 +68,10 @@ def test_theme_constants():
         "dark": "rgba(240, 243, 245, 0.30)",
     }
     assert theme.OPACITY == 0.88
+    assert theme.KNOB_COLOR == "#20252B"
+    assert theme.KNOB_BORDER == "rgba(255, 255, 255, 0.14)"
+    assert theme.SWITCH_HOVER_ALPHA == 0.28
+    assert theme.SWITCH_ACTIVE_ALPHA == 0.34
 
 
 def test_resolve_variant_dark_name():
@@ -148,7 +152,7 @@ def test_css_variants():
 def test_css_non_composited_is_opaque():
     for variant in ("light", "dark"):
         css = theme.build_css(variant, False)
-        assert "rgba(" not in css
+        assert "background-color: rgba(" not in css
         assert theme.SURFACE[variant] in css
         assert theme.BORDER_SOLID[variant] in css
 
@@ -165,6 +169,53 @@ def test_css_composited_is_translucent():
 def test_css_invalid_variant_raises():
     with pytest.raises(ValueError):
         theme.build_css("sepia", True)
+
+
+def _css_block(css: str, selector: str) -> str:
+    start = css.index(f"{selector} {{")
+    return css[start : css.index("}", start) + 1]
+
+
+def test_css_switch_knob_does_not_depend_on_variant():
+    light = _css_block(
+        theme.build_css("light", False), "switch.deskawake-switch slider"
+    )
+    dark = _css_block(
+        theme.build_css("dark", False), "switch.deskawake-switch slider"
+    )
+    assert light == dark
+    assert f"background-color: {theme.KNOB_COLOR};" in light
+    assert theme.KNOB_BORDER in light
+    # A borda do knob não pode alterar a métrica do switch (32 px): o realce
+    # usa box-shadow e o conteúdo permanece com 14 px.
+    assert "border: none;" in light
+    assert "min-width: 14px;" in light
+
+
+def test_css_switch_hover_and_pressed():
+    css = theme.build_css("light", False)
+    hover = _css_block(css, "switch.deskawake-switch:hover")
+    active = _css_block(css, "switch.deskawake-switch:active")
+    assert f"rgba(255, 255, 255, {theme.SWITCH_HOVER_ALPHA})" in hover
+    assert f"rgba(255, 255, 255, {theme.SWITCH_ACTIVE_ALPHA})" in active
+
+
+def test_format_error_tooltip_empty():
+    assert theme.format_error_tooltip("") == ""
+    assert theme.format_error_tooltip("   ") == ""
+
+
+def test_format_error_tooltip_strips_reason():
+    assert theme.format_error_tooltip("  motivo  ") == "<b>DeskAwake</b>\nmotivo"
+
+
+def test_format_error_tooltip_escapes_reason():
+    markup = theme.format_error_tooltip('falha <backend> & "tela"')
+    assert markup.startswith("<b>DeskAwake</b>\n")
+    assert "<backend>" not in markup
+    assert "&lt;backend&gt;" in markup
+    assert "&amp;" in markup
+    assert "&quot;" in markup
 
 
 def test_css_menu_uses_font_stack():

@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import xml.etree.ElementTree as ET
 
+from gi.repository import GLib
+
 from core.config import PILL_HEIGHT, PILL_WIDTH
 
 SYMBOL_SIZE = 22
@@ -38,6 +40,12 @@ BORDER_HOVER_COMPOSITED = {
     "dark": "rgba(240, 243, 245, 0.30)",
 }
 OPACITY = 0.88
+
+KNOB_COLOR = "#20252B"
+KNOB_BORDER = "rgba(255, 255, 255, 0.14)"
+SWITCH_HOVER_ALPHA = 0.28
+SWITCH_ACTIVE_ALPHA = 0.34
+SWITCH_HIGHLIGHT = "rgba(255, 255, 255, {alpha})"
 
 SPINNER_FRAME_COUNT = 24
 SPINNER_STEP_DEGREES = 15
@@ -121,6 +129,14 @@ switch.deskawake-switch {{
     background-color: {STATE_COLORS["off"]};
 }}
 
+switch.deskawake-switch:hover {{
+    box-shadow: inset 0 0 0 1px {SWITCH_HIGHLIGHT.format(alpha=SWITCH_HOVER_ALPHA)};
+}}
+
+switch.deskawake-switch:active {{
+    box-shadow: inset 0 0 0 1px {SWITCH_HIGHLIGHT.format(alpha=SWITCH_ACTIVE_ALPHA)};
+}}
+
 switch.deskawake-switch slider {{
     min-width: 14px;
     min-height: 14px;
@@ -129,8 +145,8 @@ switch.deskawake-switch slider {{
     border: none;
     border-radius: 7px;
     background-image: none;
-    box-shadow: none;
-    background-color: {SURFACE[variant]};
+    box-shadow: inset 0 0 0 1px {KNOB_BORDER};
+    background-color: {KNOB_COLOR};
 }}
 
 .deskawake-pill.state-on switch.deskawake-switch {{
@@ -160,6 +176,14 @@ def icon_color(variant: str) -> str:
         return TEXT[variant]
     except KeyError as exc:
         raise ValueError(f"variante de tema inválida: {variant!r}") from exc
+
+
+def format_error_tooltip(error: str) -> str:
+    """Markup do tooltip de erro; vazio quando não há motivo para exibir."""
+    reason = (error or "").strip()
+    if not reason:
+        return ""
+    return f"<b>DeskAwake</b>\n{GLib.markup_escape_text(reason)}"
 
 
 def svg_with_color(svg: str, color: str) -> str:

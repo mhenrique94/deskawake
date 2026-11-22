@@ -10,6 +10,12 @@
 > permanecem como **histórico do desenho original**. Permanecem válidos o contrato D-Bus (§4.3),
 > liveness (§2.6/§4.8), estados/tempos (§4.4–4.5) e os testes estáticos (ADR-10). O
 > `design_visual_aprovado.md` (E4) não é alterado.
+>
+> **Atualização E6/E7 (2026-11-21):** a antiga “E6 — instalador” virou **E7**; a **E6** agora é UI
+> GTK/MATE. Onde este documento diz “E6” para instalação/verify/READMEs, leia **E7**. A sombra do
+> Plasmoid é parte do design validado (não é bug); a `spec.md` foi emendada para permiti-la. Os
+> créditos no `metadata.json` (`Authors`, `Website`, `Copyright` com a linha legal, sem ©) entram na
+> **E7**, sem mudança de QML.
 
 **Referência:** [`spec.md`](spec.md) (decisões 1–33, “Fluxo alvo”, “Contratos”, “Aparência”, “Notas ao
 implementador” e “Variações por distro”), [`DELIVERY_MAP.md`](DELIVERY_MAP.md) §E5,
@@ -115,7 +121,7 @@ verificado por `git archive` da branch E4).
 | `busType: Session` não resolve | O enum é `BusType` no módulo; o exemplo-fonte usa `BusType.Session`; com alias, `DBus.BusType.Session` | Corrigido nos dois watchers |
 | `Rectangle` não tem `hovered`; `PlasmoidItem.toolTip*` não é consumido pelo containment de desktop | Hover vem de `ToolTipArea.containsMouse`; no painel, `CompactApplet.qml`/`DefaultCompactRepresentation.qml` consomem `toolTip*`; `BasicAppletContainer.qml` (desktop) não tem `ToolTipArea` | Pílula envolvida por `PlasmaCore.ToolTipArea`; a borda usa `pillToolTip.containsMouse`; `toolTip*` do `PlasmoidItem` fica só para painel/compatibilidade |
 | Slots 22/58/32 sem limites | A aritmética de 124 dependia de larguras fixas; `RowLayout` podia crescer o `Text` | **Histórico (pré-repaginação).** O layout atual usa escala contínua (`logoSize`, `namePixelSize`, `toggleWidth`/`toggleHeight`, etc.) e não tem slots fixos; o nome usa `elide` só como segurança. |
-| `kpackagetool6 -i ./plasmoid` **sem `-t`** não instala como Plasmoid | Teste real: foi para `~/.local/share/kpackage/generic/`; com `-t Plasma/Applet` foi para `~/.local/share/plasma/plasmoids/` | Todos os comandos passam a usar `-t Plasma/Applet` (inclusive `--upgrade`/`-r`); a E6 deve ser ajustada |
+| `kpackagetool6 -i ./plasmoid` **sem `-t`** não instala como Plasmoid | Teste real: foi para `~/.local/share/kpackage/generic/`; com `-t Plasma/Applet` foi para `~/.local/share/plasma/plasmoids/` | Todos os comandos passam a usar `-t Plasma/Applet` (inclusive `--upgrade`/`-r`); a E7 deve ser ajustada |
 | `Configurar` aparece sem `config.qml` e abre configuração sem categorias | Sonda: `visible=true`, `enabled=true`, `hasConfigurationInterface=true`; `AppletPrivate::init` liga a flag | Mantido (a spec pede o item); limitação documentada nas §4.6/§11 e na E6 |
 | `plasmawindowed` não prova 124×42 | Ele abriu 500×500 e esticou o applet; `Layout.minimumWidth` lido foi 124 | **Histórico.** O smoke de carregamento continua; a validação atual usa 168×44, 184×48 e 300×84. |
 | Célula do containment de desktop maior que a pílula | Teste real: `ItemGeometries=Applet-134:96,1056,128,96` e `root.width/height=128/96`; o `AppletsLayout` usa `minimumItemHeight = gridUnit*3` | **Superado pela repaginação:** a pílula preenche a raiz redimensionável; um widget novo é adicionado em 184×48 (192×64 de container) e o Plasma persiste a geometria. |
@@ -791,11 +797,15 @@ execução.
   - B: ícone customizado no pacote — mais um asset sem requisito de produto.
   - C: mínimo 6.0 — `SignalWatcher` não existe em 6.0/6.2/6.3 e o widget falharia silenciosamente.
 - **Decisão:** A. Descrição em pt-BR; `Name` fixo “DeskAwake”; sem `X-Plasma-API` legado.
+- **Atualização E7 (2026-11-21):** o `metadata.json` recebe créditos **aditivos** — `Authors:
+  [{"Name": "Marcelo Silva"}]`, `Website: "https://manivasoftware.com.br"` e `Copyright` com a
+  linha legal (sem ©). Isso não altera o QML nem o comportamento do Plasmoid; o “Sobre” nativo do
+  Plasma passa a exibir os créditos.
 - **Validação no Plasma 6.6.7:** o ícone `preferences-system-power-management` existe no Breeze;
   `X-Plasma-API-Minimum-Version` é chave de topo do `metadata.json`; o pacote-sonda instalou e
   carregou com `kpackagetool6 -t Plasma/Applet` (sem `-t`, foi para o pacote genérico).
 - **Consequências:** o widget aparece em “Adicionar widgets” com ícone de energia; em Plasma < 6.4
-  não é oferecido; a E6 instala o pacote via `kpackagetool6 -t Plasma/Applet`.
+  não é oferecido; a **E7** instala o pacote via `kpackagetool6 -t Plasma/Applet`.
 
 ### ADR-12: Strings pt-BR literais, sem catálogo de tradução e sem config UI
 
@@ -1149,7 +1159,7 @@ com o resultado do usuário; o teste estático é condição necessária, não s
 | Ação D-Bus | `SetActive(true/false)` ou `Toggle()` | Sempre `SetActive` | Coerência com a E4 e idempotência; a spec aceita ambos |
 | `Sair` | `SetActive(false)` → `Quit()` | Não remove o widget; daemon morto → apenas fecha o menu | E5.3/E5.4; remover o widget não pode ser kill switch implícito |
 | Config UI | “Configurar” entre itens nativos | Sem `config.qml`; o item aparece, mas abre a configuração sem categorias | Fora do escopo da E5; limitação de UX documentada na E6 (a spec pede o item; removê-lo contrariaria a spec) |
-| `kpackagetool6` | `kpackagetool6 -i ./plasmoid` | `kpackagetool6 -t Plasma/Applet -i/--upgrade` (e `-t Plasma/Applet -r`) | Testado: sem `-t`, o 2.0 instala como `KPackage/Generic` em `~/.local/share/kpackage/generic/` e o Plasmoid não aparece |
+| `kpackagetool6` | `kpackagetool6 -t Plasma/Applet -i ./plasmoid` | `kpackagetool6 -t Plasma/Applet -i/--upgrade` (e `-t Plasma/Applet -r`) | Testado: sem `-t`, o 2.0 instala como `KPackage/Generic` em `~/.local/share/kpackage/generic/` e o Plasmoid não aparece |
 | Baseline de testes | 233 passed | 219 nesta branch (192 + 27 novos); 260 com E4 | A E5 empilha sobre a E3; os testes da E4 só entram quando ela é mergeada |
 | Ambiente de validação | “Mint/MATE; checklist no Kubuntu” | Ubuntu 26.04.1 + Plasma 6.6.7/Wayland nesta sessão; smoke `plasmawindowed` + checklist nesta máquina | O ambiente mudou; `plasmawindowed` não prova 124×42 nem arrasto |
 | Metadados | Campos exigidos, valores não fixados | `preferences-system-power-management` / `System Information` / MIT / 0.1.0 | Escolha neutra; ícone existe no Breeze; instalação testada com `-t Plasma/Applet` |
