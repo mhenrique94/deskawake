@@ -220,6 +220,9 @@ def test_test_deb_contract():
     ):
         assert token in source
 
+    # Sem engine, o script deve sair 2 mesmo quando o pacote ainda não existe.
+    assert source.index("command -v docker") < source.index('DEB="dist/deskawake_')
+
 
 # --- Coexistência com a instalação per-user -----------------------------------
 

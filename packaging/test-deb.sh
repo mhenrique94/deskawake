@@ -48,6 +48,15 @@ while (($#)); do
     shift
 done
 
+if command -v docker >/dev/null 2>&1; then
+    ENGINE=docker
+elif command -v podman >/dev/null 2>&1; then
+    ENGINE=podman
+else
+    printf 'test-deb.sh: docker ou podman ausente; o smoke test em container é opcional fora do CI\n' >&2
+    exit 2
+fi
+
 VERSION="$(python3 -c 'import core; print(core.__version__)')"
 if [[ ! "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
     die "versão inválida em core.__version__: $VERSION"
@@ -56,15 +65,6 @@ fi
 DEB="dist/deskawake_${VERSION}_all.deb"
 if [[ ! -f "$DEB" ]]; then
     die "pacote ausente: \"$DEB\"; rode packaging/build-deb.sh antes"
-fi
-
-if command -v docker >/dev/null 2>&1; then
-    ENGINE=docker
-elif command -v podman >/dev/null 2>&1; then
-    ENGINE=podman
-else
-    printf 'test-deb.sh: docker ou podman ausente; o smoke test em container é opcional fora do CI\n' >&2
-    exit 2
 fi
 
 DIST_DIR="$(cd -- "$(dirname -- "$DEB")" && pwd -P)"
