@@ -53,7 +53,7 @@ if command -v docker >/dev/null 2>&1; then
 elif command -v podman >/dev/null 2>&1; then
     ENGINE=podman
 else
-    printf 'test-deb.sh: docker ou podman ausente; o smoke test em container é opcional fora do CI\n' >&2
+    printf 'test-deb.sh: docker ou podman ausente; instale um engine para rodar o smoke test do pacote\n' >&2
     exit 2
 fi
 

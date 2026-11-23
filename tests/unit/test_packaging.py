@@ -60,6 +60,10 @@ def test_control_template_contract():
     depends = next(
         line for line in source.splitlines() if line.startswith("Depends:")
     )
+    assert depends == (
+        "Depends: python3 (>= 3.10), python3-gi, python3-dbus, "
+        "gir1.2-gtk-3.0, systemd, libglib2.0-bin"
+    )
     for dependency in (
         "python3 (>= 3.10)",
         "python3-gi",
@@ -314,6 +318,8 @@ def test_workflow_contract():
     ):
         assert token in source
 
+    # workflow_dispatch não pode publicar release, mesmo apontando para uma tag.
+    assert "github.event_name == 'push'" in source
     assert "gpg" not in source.lower()
 
 

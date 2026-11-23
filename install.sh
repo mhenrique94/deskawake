@@ -365,7 +365,11 @@ if [[ -z "$TARGET" ]]; then
     exit 1
 fi
 
-refuse_system_package
+if ((INSTALL_DEPS)) && system_package_installed; then
+    check_install_deps
+    warn "pacote deskawake instalado system-wide; o perfil per-user não é instalado por este script (use /usr/bin/deskawake)"
+    exit 0
+fi
 
 check_install_deps
 
