@@ -119,14 +119,6 @@ def test_assets_have_no_effects(name):
 
 
 @pytest.mark.parametrize("name", ["deskawake.svg", "spinner.svg"])
-def test_assets_are_verbatim(name):
-    visual = REPO_ROOT / "docs" / "implementation" / "visual" / "assets"
-    if not visual.is_dir():
-        pytest.skip("pacote visual ausente")
-    assert (ASSETS / name).read_bytes() == (visual / name).read_bytes()
-
-
-@pytest.mark.parametrize("name", ["deskawake.svg", "spinner.svg"])
 def test_parsed_assets_are_valid_xml(name):
     _parse(name)
 

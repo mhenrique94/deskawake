@@ -531,15 +531,6 @@ def test_assets_are_valid_xml():
         assert svg.get("viewBox") == "0 0 22 22"
 
 
-def test_assets_are_verbatim():
-    reference = REPO_ROOT / "docs/implementation/visual/assets"
-    if not reference.is_dir():
-        pytest.skip("assets de referência ausentes")
-
-    for name in ("deskawake.svg", "spinner.svg"):
-        assert (ASSETS / name).read_bytes() == (reference / name).read_bytes()
-
-
 def test_assets_sha256():
     expected = {
         "deskawake.svg": DESKAWAKE_SHA256,
