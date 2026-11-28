@@ -10,7 +10,7 @@
 
 > **Reprogramação (2026-11-21):** a antiga “E6 — instalador” foi dividida. **E6 = UI GTK/MATE**
 > (ajustes, paridade visual e créditos), **E7 = instalação/desinstalação/verificação/testes/docs** e
-> **E8 = empacotamento/distribuição** (design completo). Onde as seções históricas de E1–E5 dizem “E6”
+> **E8 = empacotamento/distribuição** (placeholder). Onde as seções históricas de E1–E5 dizem “E6”
 > para instalador, READMEs ou `.service`, leia **E7**; onde dizem “E6” para UI/validação MATE, leia
 > **E6**. Os designs completos estão em [`design_e6.md`](design_e6.md), [`design_e7.md`](design_e7.md)
 > e [`design_e8.md`](design_e8.md).
@@ -25,7 +25,7 @@
   D-Bus do daemon. E4 e E5 podem ser feitas em paralelo ou em qualquer ordem.
 - **E6 (UI GTK/MATE)** depende de E1–E5 e fecha a parte visual/funcional do MATE (A1–A7 na UI,
   créditos e versão). **E7 (instalação)** depende da E6 e instala artefatos reais. **E8
-  (distribuição)** depende da E7; design completo em [`design_e8.md`](design_e8.md).
+  (distribuição)** depende da E7 e está como placeholder decisório.
 - Cada entrega termina com um **gate**: suíte da entrega verde + critérios de aceite abaixo.
   Nenhuma entrega “adiada para a próxima” — o que não pertence ao escopo é explicitamente listado
   como **fora de escopo**.
@@ -40,9 +40,9 @@
   (7.4.4 no Mint, 9.0.2 no Kubuntu) e executada como `python3 -m pytest`. **Nunca** instalada pelo
   `install.sh`.
 - Nada de `sudo` em qualquer script entregue ao usuário.
-- Sem empacotamento de distro na E7 (`.deb`, AUR, Flatpak). O `.deb` via GitHub Releases é a **E8**,
-  conforme [`design_e8.md`](design_e8.md); AUR/Flatpak/AppImage/Snap ficam fora. `pyproject.toml`
-  existe **só** para configurar `pytest`.
+- Sem empacotamento de distro na E7 (`.deb`, AUR, Flatpak). O `.deb` via GitHub Releases é a **E8**
+  (placeholder); AUR/Flatpak/AppImage ficam fora. `pyproject.toml` existe **só** para configurar
+  `pytest`.
 - Sem suporte a Windows/macOS; sem testes de GUI automatizados (comportamento visual é checklist
   manual, conforme convenção da spec).
 
@@ -79,7 +79,7 @@ PR, e **uma entrega = um PR**.
 | **E5** | `feat/e5-plasmoid-kde` | `feat(e5): Plasmoid para Plasma 6.6` |
 | **E6** | `feat/e6-ui-gtk-mate` | `feat(e6): ajustes, paridade visual e créditos do GTK/MATE` |
 | **E7** | `feat/e7-instalador-verificacao-docs` | `feat(e7): instalador, verificação e documentação` |
-| **E8** | `feat/e8-distribuicao` | `feat(e8): empacotamento e distribuição` |
+| **E8** | `feat/e8-distribuicao` | `feat(e8): empacotamento e distribuição` (placeholder) |
 
 **Corpo do PR (template):**
 
@@ -167,16 +167,6 @@ deskawake/
 ├── install.sh
 ├── uninstall.sh
 ├── verify.sh
-├── packaging/                      # E8: empacotamento sem debhelper
-│   ├── debian/
-│   │   ├── changelog
-│   │   ├── control.in
-│   │   └── copyright
-│   ├── build-deb.sh                # .deb + tarball + SHA256SUMS
-│   └── test-deb.sh                 # smoke test em ubuntu:24.04
-├── .github/
-│   └── workflows/
-│       └── release.yml             # tag v* → build, teste e release
 └── tests/
     ├── conftest.py
     ├── unit/
@@ -195,8 +185,6 @@ deskawake/
         ├── test_kde_optimistic.py
         └── test_lifecycle.py       # SIGTERM, Quit, PDEATHSIG, Local.Disconnected
 ```
-
-Gerado e não versionado: `dist/` (`.deb`, tarball e `SHA256SUMS` da E8).
 
 Instalado no usuário (produzido pela E7, não versionado em `~/.local`):
 
@@ -1240,51 +1228,41 @@ python3 -m pytest tests/integration/test_installer_scripts.py -v
 
 ---
 
-# E8 — Empacotamento e Distribuição
+# E8 — Empacotamento e Distribuição (placeholder)
 
 ## E8.1 Objetivo e escopo
 
-Entregar o `.deb` system-wide via GitHub Releases, com CI que gera pacote, tarball e checksums. O
-`install.sh` per-user continua como alternativa. **Design completo em
-[`design_e8.md`](design_e8.md)**; esta seção resume as decisões executáveis.
+Registrar o canal de distribuição e os pontos a especificar depois da E7. **Não** há implementação
+nesta rodada.
 
 | # | Decisão | Valor |
 |---|---|---|
 | 1 | Canal | **GitHub Releases + `.deb`** (CI gera pacote, tarball e checksums) |
-| 2 | Per-user | `install.sh` continua como alternativa sem `sudo`; não é substituído |
-| 3 | Versão | `0.1.0` (`core.__version__`), sem override no build |
-| 4 | Fora de escopo | AUR, Flatpak, AppImage, Snap, APT repo, GPG, auto-update |
-| 5 | Layout | `.deb` system-wide (`/usr/lib/deskawake`, `/usr/bin/deskawake`, `/usr/share/...`); config/estado por usuário |
-| 6 | Pacote | `deskawake`, `Architecture: all`; Plasmoid incluído no pacote |
-| 7 | CLI | `/usr/bin/deskawake` → symlink para `/usr/lib/deskawake/bin/deskawake` |
-| 8 | Maintainer | `Marcelo Silva <contato@manivasoftware.com.br>` |
-| 9 | Depends | `python3 (>= 3.10)`, `python3-gi`, `python3-dbus`, `gir1.2-gtk-3.0`, `systemd`, `libglib2.0-bin`; `Suggests: fonts-inter`; sem `Recommends` |
-| 10 | Maintainer scripts | Nenhum; não inicia daemon no install e não toca em `$HOME` |
-| 11 | Coexistência | `install.sh` recusa com o pacote presente; `uninstall.sh` avisa; `verify.sh` aceita instalação system-wide |
-| 12 | CI | GitHub Actions/`ubuntu-latest`; `dpkg-deb` (sem debhelper/fpm); tag `v*` |
-| 13 | Artefatos | `deskawake_0.1.0_all.deb`, `deskawake-0.1.0.tar.gz`, `SHA256SUMS` |
-| 14 | Teste | Container `ubuntu:24.04`: instalar, `deskawake status` = 3, remover, sem resíduos |
-| 15 | Update | Manual (instalar o próximo `.deb`); sem auto-update |
-| 16 | Repo | `packaging/{debian,build-deb.sh,test-deb.sh}`, `.github/workflows/release.yml`, `dist/` ignorado |
-| 17 | Spec | Emendar a restrição “sem empacotamento de distro” e a decisão 38 na implementação |
+| 2 | Per-user | `install.sh` continua como alternativa sem `sudo` |
+| 3 | Versão | `0.1.0` (`core.__version__`) |
+| 4 | Fora de escopo | AUR, Flatpak, AppImage, Snap |
+| 5 | Layout | `.deb` system-wide (`/usr/lib/deskawake`, `/usr/bin/deskawake`, `/usr/share/...`); config/autostart por usuário |
+| 6 | CI | GitHub Actions/`ubuntu-latest`; build com `dpkg-deb` |
+| 7 | Assinatura | Sem GPG nesta rodada; checksums SHA-256 |
+| 8 | Spec | Emendar a restrição “sem empacotamento de distro” quando a E8 for especificada |
 
-## E8.2 Entregáveis
+## E8.2 Pontos a especificar depois da E7
 
-- `packaging/debian/{control.in,changelog,copyright}` e `packaging/build-deb.sh`.
-- `packaging/test-deb.sh` (smoke test em `ubuntu:24.04`).
-- `.github/workflows/release.yml` (tag `v*` → build, teste, release e checksums).
-- Adaptações em `install.sh`, `uninstall.sh` e `verify.sh` para a coexistência.
-- `README.md`/`README.en.md` com instalação, atualização, remoção e checksums do `.deb`.
-- `tests/unit/test_packaging.py` + versão do changelog em `test_version.py`.
+- Nome do pacote e conflito com o wrapper per-user; detecção de instalação prévia.
+- `control`: maintainer (e-mail ainda não definido), dependências e `Recommends`.
+- Paths system-wide do `.service`, autostart, Plasmoid e assets; como o `@EXEC@` aponta para
+  `/usr/bin/deskawake`.
+- `postinst`/`prerm`; nada de iniciar daemon no install.
+- Workflow de tag `v*`, anexos do release e checksums.
+- Teste em container `ubuntu:24.04`/`26.04` (`dpkg -i`, `deskawake status`, remoção).
+- Update manual (sem auto-update).
 
 ## E8.3 Critérios para iniciar
 
-- [x] E7 mergeada e layout per-user congelado (PR #13).
-- [x] E6 mergeada com `core.__version__` e About (PR #12).
-- [x] E-mail do maintainer definido (`contato@manivasoftware.com.br`).
-- [x] Workflow/CI, nomes de artefatos e container aprovados.
-- [x] Decisões do design aprovadas em 2026-11-22.
-- [ ] Implementação na branch `feat/e8-distribuicao`.
+- [ ] E7 mergeada e layout per-user congelado.
+- [ ] E6 mergeada com `core.__version__` e About.
+- [ ] E-mail do maintainer definido.
+- [ ] Workflow/CI e nomes de artefatos aprovados.
 
 ---
 
@@ -1347,7 +1325,7 @@ Entregar o `.deb` system-wide via GitHub Releases, com CI que gera pacote, tarba
 | **G-E5** | Teste estático do Plasmoid verde; `kpackagetool6 -t Plasma/Applet -i` instala; checklist manual Kubuntu executada (backend + visual) |
 | **G-E6** | Testes de versão/tema/UI estática verdes; baseline preservado; checklist MATE §9.2 preenchida (A1–A7 na parte de UI) |
 | **G-E7** | `bash -n` limpo; `install.sh`/`uninstall.sh` idempotentes nas duas máquinas; `verify.sh` verde nos dois backends; suíte completa verde; READMEs completos com créditos |
-| **G-E8** | `pytest` completo verde (inclui `test_packaging.py` e versão do changelog); `bash -n` limpo; `packaging/build-deb.sh` gera `.deb`/tarball/`SHA256SUMS` com `sha256sum -c` OK; `packaging/test-deb.sh` instala/remove em `ubuntu:24.04` com `deskawake status` = 3 e sem resíduos; `install.sh` recusa com o pacote presente; `verify.sh` encontra a instalação system-wide; READMEs cobrem `.deb`/update/remoção; tag `v0.1.0` publica os três anexos |
+| **G-E8** | Placeholder: só fecha quando o `.deb` instalar/remover em container e o release tiver checksums |
 
 ---
 
@@ -1366,7 +1344,7 @@ Entregar o `.deb` system-wide via GitHub Releases, com CI que gera pacote, tarba
 | A1 (“mostrar área de trabalho”) | Spike da E6 + checklist MATE; fallback documentado na E7 |
 | Contraste do knob no tema claro | Checklist MATE (E6) |
 | Créditos no “Sobre” do Plasma | Checklist Kubuntu (E7) + `test_plasmoid_assets.py` |
-| `.deb` system-wide | Container `ubuntu:24.04` (E8) + checklist Mint/Kubuntu do `design_e8.md` |
+| `.deb` system-wide | Container da E8 (placeholder) |
 
 > **Limite de validação declarado na spec:** o backend/UI MATE foi validado por leitura de ambiente;
 > o backend KDE foi validado por D-Bus e código-fonte do PowerDevil/kscreenlocker; a **GUI do
