@@ -743,6 +743,28 @@ def test_install_deps_all_exits_0(sandbox: Sandbox):
     assert result.returncode == 0
 
 
+def test_install_deps_all_with_system_package_only_diagnoses(sandbox: Sandbox):
+    _write_executable(
+        sandbox.bin / "dpkg-query",
+        """\
+        #!/bin/sh
+        printf 'install ok installed\\n'
+        """,
+    )
+
+    result = sandbox.run(
+        "install.sh",
+        "--install-deps",
+        "--all",
+        env_extra={"KPKG_TOOL": "__missing__"},
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert "Dependências obrigatórias (runtime):" in result.stdout
+    assert not sandbox.share.exists()
+    assert not sandbox.launcher.exists()
+
+
 def test_install_handles_home_with_spaces(sandbox: Sandbox):
     home = sandbox.root / "home with space"
     data = sandbox.root / "data with space"

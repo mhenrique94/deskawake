@@ -280,7 +280,9 @@ def test_verify_script_has_no_privilege_escalation():
 
 def test_verify_script_preconditions():
     source = _script("verify.sh")
-    assert "DeskAwake não instalado; rode ./install.sh" in source
+    assert "DeskAwake não instalado" in source
+    assert "./install.sh" in source
+    assert ".deb" in source
     assert "dependência de diagnóstico ausente:" in source
     assert "trap" in source
 

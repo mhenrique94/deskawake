@@ -1,0 +1,16 @@
+Package: deskawake
+Version: @VERSION@
+Architecture: all
+Maintainer: Marcelo Silva <contato@manivasoftware.com.br>
+Installed-Size: @INSTALLED_SIZE@
+Depends: python3 (>= 3.10), python3-gi, python3-dbus, gir1.2-gtk-3.0, systemd, libglib2.0-bin
+Suggests: fonts-inter
+Section: utils
+Priority: optional
+Homepage: https://github.com/mhenrique94/deskawake
+Bugs: https://github.com/mhenrique94/deskawake/issues
+Description: mantém a tela e o sistema acordados quando ativado
+ Utilitário de desktop para MATE/X11 e KDE Plasma 6 que impede o bloqueio
+ da tela e a suspensão por inatividade enquanto estiver ativado.
+ .
+ Inclui o daemon D-Bus, o widget GTK3 e o Plasmoid.

@@ -1,0 +1,5 @@
+deskawake (0.1.0) unstable; urgency=medium
+
+  * Versão inicial com daemon D-Bus, widget GTK3 e Plasmoid.
+
+ -- Marcelo Silva <contato@manivasoftware.com.br>  Sun, 22 Nov 2026 00:00:00 -0300
