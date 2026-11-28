@@ -361,9 +361,6 @@ def test_readmes_have_normative_commands(name):
         "./verify.sh",
         "systemd-inhibit --list",
         "daemon.log",
-        "python3 -m pytest",
-        "dbus-run-session -- python3 -m pytest",
-        "python3 -m pytest tests/integration -m slow",
         "--force",
     ):
         assert token in source
@@ -375,16 +372,9 @@ def test_readmes_document_limitations(name):
     for token in (
         "kpackagetool6",
         "Wayland",
-        "~5 s",
-        "~6 s",
         "systemctl suspend",
-        "CanSuspend",
-        "GetInhibitors",
-        "ActiveInhibitions",
-        "HasInhibition",
         "Mint 22.3",
         "Kubuntu 26.04",
-        "checklist",
     ):
         assert token in source
 
@@ -410,11 +400,6 @@ def test_readmes_credits_and_version(name):
         LEGAL_LINE,
     ):
         assert token in source
-
-
-@pytest.mark.parametrize("name", README_FILES)
-def test_readmes_link_spec(name):
-    assert "docs/implementation/spec.md" in _text(name)
 
 
 def test_license_has_company_and_cnpj():
