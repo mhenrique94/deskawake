@@ -1,10 +1,12 @@
 # DeskAwake
 
+[Português](README.md) · **English**
+
 Keeps your screen on and your system awake while you need it — no conventional window, no taskbar entry, no `Alt+Tab`.
 
 Runs on **Linux Mint 22.3 MATE (X11)** and **Kubuntu 26.04 / KDE Plasma 6.6 (Wayland)**: a GTK3 widget on MATE and a native Plasmoid on Plasma.
 
-> Version `0.1.0`, MIT license. Português: [`README.md`](README.md).
+> Version `0.1.0`, MIT license.
 
 ## What it does
 
